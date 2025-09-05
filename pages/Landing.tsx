@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Button, Card } from '../components/ui';
 import { ICONS } from '../constants';
 
-// FIX: Changed icon prop type to React.ReactElement to fix cloneElement type error.
+// FIX: Changed icon prop type to React.ReactElement to fix cloneElement type error. The original type was too generic for TypeScript to know about the `className` prop.
 const FeatureCard: React.FC<{ icon: React.ReactElement; title: string; description: string }> = ({ icon, title, description }) => (
     <Card className="text-center p-8 flex flex-col items-center">
         <div className="bg-primary-100 text-primary-600 p-4 rounded-full mb-4">

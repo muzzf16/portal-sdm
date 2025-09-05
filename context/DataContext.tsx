@@ -19,8 +19,7 @@ interface DataContextType {
 
 export const DataContext = createContext<DataContextType>({
     db: initialDb,
-    // FIX: Corrected the function signature for the default `updateDb` to match `DataContextType`.
-    // It now accepts one argument as required, resolving the "Expected 1 arguments, but got 0" error.
+    // FIX: Corrected the function signature for the default `updateDb` to match `DataContextType`, which expects one argument.
     updateDb: (newDb: MockDatabase) => {},
     isLoading: true,
 });

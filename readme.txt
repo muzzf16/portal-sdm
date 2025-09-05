@@ -31,11 +31,20 @@ proyek-sdm/
 │   └── Login.tsx
 ├── App.tsx
 ├── constants.tsx
+├── database_schema.txt
 ├── index.html
 ├── index.tsx
 ├── metadata.json
 ├── readme.txt
 └── types.ts
+
+STRUKTUR DATA (SKEMA DATABASE)
+-----------------------------
+Aplikasi ini menggunakan model data yang disimpan di localStorage browser untuk mensimulasikan database. Untuk pemahaman mendalam tentang struktur data, relasi antar tabel, dan detail setiap kolom, silakan merujuk ke file:
+
+`database_schema.txt`
+
+Dokumen tersebut menjelaskan setiap "tabel" data seperti `users`, `employees`, `leaveRequests`, dll.
 
 
 LANGKAH-LANGKAH INSTALASI
