@@ -1,3 +1,4 @@
+
 import React, { useState, createContext, useMemo, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { User, Role } from './types';
@@ -6,6 +7,7 @@ import { AdminPage } from './pages/Admin';
 import { EmployeePage } from './pages/Employee';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './context/ToastContext';
+import { LandingPage } from './pages/Landing';
 
 interface AuthContextType {
     user: User | null;
@@ -37,17 +39,12 @@ const App: React.FC = () => {
 
     const authContextValue = useMemo(() => ({ user, login, logout }), [user, login, logout]);
 
-    const renderApp = () => {
+    const renderAuthenticatedApp = () => {
         if (!user) {
-            return <Navigate to="/login" replace />;
+            // Should not happen with the new routing, but as a fallback.
+            return <Navigate to="/" replace />;
         }
-        if (user.role === Role.ADMIN) {
-            return <AdminPage />;
-        }
-        if (user.role === Role.EMPLOYEE) {
-            return <EmployeePage />;
-        }
-        return <Navigate to="/login" replace />;
+        return user.role === Role.ADMIN ? <AdminPage /> : <EmployeePage />;
     };
 
     return (
@@ -56,8 +53,19 @@ const App: React.FC = () => {
                 <ToastProvider>
                     <HashRouter>
                         <Routes>
-                            <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-                            <Route path="/*" element={renderApp()} />
+                            {user ? (
+                                <>
+                                    {/* All authenticated routes are handled within the Admin/Employee pages */}
+                                    <Route path="/*" element={renderAuthenticatedApp()} />
+                                </>
+                            ) : (
+                                <>
+                                    <Route path="/" element={<LandingPage />} />
+                                    <Route path="/login" element={<LoginPage />} />
+                                    {/* Redirect any other path to landing if not logged in */}
+                                    <Route path="*" element={<Navigate to="/" replace />} />
+                                </>
+                            )}
                         </Routes>
                     </HashRouter>
                 </ToastProvider>

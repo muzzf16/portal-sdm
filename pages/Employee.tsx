@@ -488,8 +488,8 @@ const PerformanceReviewDetailModal: React.FC<{ review: PerformanceReview; onSave
                     <div className="space-y-4">
                         {review.kpis.map(kpi => (
                             <div key={kpi.id} className="p-3 border rounded-md">
-                                <div className="grid grid-cols-3 gap-4 items-center">
-                                    <div className="col-span-2">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                                    <div className="md:col-span-2">
                                         <div className="flex justify-between items-start">
                                             <p className="font-semibold pr-2">{kpi.metric}</p>
                                             <p className={`font-bold text-xl flex-shrink-0 ${scoreColor(kpi.score)}`}>{kpi.score}/5</p>
@@ -500,7 +500,7 @@ const PerformanceReviewDetailModal: React.FC<{ review: PerformanceReview; onSave
                                         </div>
                                         {kpi.notes && <p className="text-xs text-gray-500 mt-2"><em>Catatan: {kpi.notes}</em></p>}
                                     </div>
-                                    <div className="col-span-1">
+                                    <div>
                                         <ResponsiveContainer width="100%" height={40}>
                                             <BarChart
                                                 layout="vertical"
