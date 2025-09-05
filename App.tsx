@@ -1,10 +1,11 @@
-
 import React, { useState, createContext, useMemo, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { User, Role } from './types';
 import { LoginPage } from './pages/Login';
 import { AdminPage } from './pages/Admin';
 import { EmployeePage } from './pages/Employee';
+import { DataProvider } from './context/DataContext';
+import { ToastProvider } from './context/ToastContext';
 
 interface AuthContextType {
     user: User | null;
@@ -51,12 +52,16 @@ const App: React.FC = () => {
 
     return (
         <AuthContext.Provider value={authContextValue}>
-            <HashRouter>
-                <Routes>
-                    <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-                    <Route path="/*" element={renderApp()} />
-                </Routes>
-            </HashRouter>
+            <DataProvider>
+                <ToastProvider>
+                    <HashRouter>
+                        <Routes>
+                            <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+                            <Route path="/*" element={renderApp()} />
+                        </Routes>
+                    </HashRouter>
+                </ToastProvider>
+            </DataProvider>
         </AuthContext.Provider>
     );
 };

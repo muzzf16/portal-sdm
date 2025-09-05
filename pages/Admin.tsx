@@ -1,10 +1,11 @@
-
-import React, { useState, useMemo, Fragment } from 'react';
+import React, { useState, useMemo, Fragment, useContext } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Layout } from '../components/Layout';
-import { ADMIN_NAV_LINKS, MOCK_DB, ICONS, attendanceData } from '../constants';
+import { ADMIN_NAV_LINKS, ICONS, attendanceData } from '../constants';
 import { Card, StatCard, Modal, Button, Input, Select, PageTitle, Textarea } from '../components/ui';
 import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus } from '../types';
+import { DataContext } from '../context/DataContext';
+import { useApi } from '../hooks/useApi';
 
 const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
     const [isVisible, setIsVisible] = useState(true);
@@ -34,12 +35,14 @@ const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }>
 };
 
 
-const AdminDashboard: React.FC<{ pendingRequestsCount: number; setActiveView: (view: string) => void }> = ({ pendingRequestsCount, setActiveView }) => (
+const AdminDashboard: React.FC<{ pendingRequestsCount: number; setActiveView: (view: string) => void }> = ({ pendingRequestsCount, setActiveView }) => {
+    const { db } = useContext(DataContext);
+    return (
     <div>
         <NewLeaveRequestAlert count={pendingRequestsCount} onViewClick={() => setActiveView('leaves')} />
         <PageTitle title="Dasbor Admin" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <StatCard title="Total Karyawan" value={MOCK_DB.employees.length} icon={ICONS.employees} color="bg-blue-100 text-blue-600" />
+            <StatCard title="Total Karyawan" value={db.employees.length} icon={ICONS.employees} color="bg-blue-100 text-blue-600" />
             <StatCard title="Cuti Hari Ini" value="3" icon={ICONS.leave} color="bg-yellow-100 text-yellow-600" />
             <StatCard title="Pengajuan Tertunda" value={pendingRequestsCount} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>} color="bg-orange-100 text-orange-600" />
             <StatCard title="Karyawan Baru (Bulan)" value="2" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" /></svg>} color="bg-green-100 text-green-600" />
@@ -60,11 +63,13 @@ const AdminDashboard: React.FC<{ pendingRequestsCount: number; setActiveView: (v
             </ResponsiveContainer>
         </Card>
     </div>
-);
+)};
 
 const EmployeeManagement: React.FC = () => {
-    const [employees, setEmployees] = useState<Employee[]>(MOCK_DB.employees);
-    const [users, setUsers] = useState<User[]>(MOCK_DB.users);
+    const { db, updateDb } = useContext(DataContext);
+    const { employees, users } = db;
+    const { simulateApiCall } = useApi();
+    
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
@@ -100,31 +105,36 @@ const EmployeeManagement: React.FC = () => {
     };
     
     const handleSave = (data: Partial<Employee> & { name: string; email: string }) => {
-        const { name, email, ...employeeData } = data;
+        simulateApiCall(async () => {
+            const { name, email, ...employeeData } = data;
+            let newDb = { ...db };
 
-        if (employeeData.id) { // Edit existing employee
-            const updatedEmployee = employeeData as Employee;
-            setEmployees(employees.map(e => e.id === updatedEmployee.id ? updatedEmployee : e));
-            setUsers(users.map(u => u.employeeDetails?.id === updatedEmployee.id ? { ...u, name, email } : u));
-        } else { // Add new employee
-            const newId = `emp-${Date.now()}`;
-            const newEmployee: Employee = {
-                ...(employeeData as Omit<Employee, 'id'>),
-                id: newId,
-                avatarUrl: 'https://picsum.photos/id/1/200', // Default avatar
-                payrollInfo: { baseSalary: 0, incomes: [], deductions: [] }, // Default payroll
-            };
-            const newUser: User = {
-                id: `user-${Date.now()}`,
-                name,
-                email,
-                role: Role.EMPLOYEE,
-                employeeDetails: newEmployee
-            };
-            setEmployees([...employees, newEmployee]);
-            setUsers([...users, newUser]);
-        }
-        closeFormModal();
+            if (employeeData.id) { // Edit existing employee
+                const updatedEmployee = employeeData as Employee;
+                newDb.employees = db.employees.map(e => e.id === updatedEmployee.id ? updatedEmployee : e);
+                newDb.users = db.users.map(u => u.employeeDetails?.id === updatedEmployee.id ? { ...u, name, email } : u);
+            } else { // Add new employee
+                const newId = `emp-${Date.now()}`;
+                const newEmployee: Employee = {
+                    ...(employeeData as Omit<Employee, 'id'>),
+                    id: newId,
+                    avatarUrl: 'https://picsum.photos/id/1/200', // Default avatar
+                    payrollInfo: { baseSalary: 0, incomes: [], deductions: [] }, // Default payroll
+                };
+                const newUser: User = {
+                    id: `user-${Date.now()}`,
+                    name,
+                    email,
+                    role: Role.EMPLOYEE,
+                    employeeDetails: newEmployee
+                };
+                newDb.employees = [...db.employees, newEmployee];
+                newDb.users = [...db.users, newUser];
+            }
+            updateDb(newDb);
+            closeFormModal();
+// FIX: Changed `employeeData.id` to `data.id` to fix variable scope issue. `employeeData` is not available here, but `data` is.
+        }, data.id ? 'Memperbarui data karyawan...' : 'Menambahkan karyawan baru...');
     };
 
 
@@ -139,7 +149,7 @@ const EmployeeManagement: React.FC = () => {
         });
     }, [employees, users, searchTerm, positionFilter, statusFilter]);
     
-    const allPositions = useMemo(() => [...new Set(MOCK_DB.employees.map(e => e.position))], []);
+    const allPositions = useMemo(() => [...new Set(db.employees.map(e => e.position))], [db.employees]);
 
     return (
         <div>
@@ -425,12 +435,26 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
 
 
 const LeaveManagement: React.FC = () => {
-    const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(MOCK_DB.leaveRequests);
+    const { db, updateDb } = useContext(DataContext);
+    const { leaveRequests } = db;
+    const { simulateApiCall } = useApi();
+    
     const [rejectionModalState, setRejectionModalState] = useState<{ isOpen: boolean, requestId: string | null }>({ isOpen: false, requestId: null });
     const [rejectionReason, setRejectionReason] = useState('');
 
+    const updateLeaveStatus = (id: string, status: LeaveStatus, reason?: string) => {
+        simulateApiCall(async () => {
+            const newLeaveRequests = leaveRequests.map(req => 
+                req.id === id 
+                ? { ...req, status, rejectionReason: reason } 
+                : req
+            );
+            updateDb({ ...db, leaveRequests: newLeaveRequests });
+        }, `Memperbarui status cuti menjadi ${status}...`);
+    };
+
     const handleApprove = (id: string) => {
-        setLeaveRequests(leaveRequests.map(req => req.id === id ? { ...req, status: LeaveStatus.APPROVED } : req));
+        updateLeaveStatus(id, LeaveStatus.APPROVED);
     };
 
     const openRejectionModal = (id: string) => {
@@ -444,11 +468,7 @@ const LeaveManagement: React.FC = () => {
 
     const handleRejectSubmit = () => {
         if (!rejectionModalState.requestId) return;
-        setLeaveRequests(leaveRequests.map(req => 
-            req.id === rejectionModalState.requestId 
-            ? { ...req, status: LeaveStatus.REJECTED, rejectionReason: rejectionReason } 
-            : req
-        ));
+        updateLeaveStatus(rejectionModalState.requestId, LeaveStatus.REJECTED, rejectionReason);
         closeRejectionModal();
     };
     
@@ -528,7 +548,8 @@ const LeaveManagement: React.FC = () => {
 };
 
 const AttendanceManagement: React.FC = () => {
-    const [records, setRecords] = useState<AttendanceRecord[]>(MOCK_DB.attendance);
+    const { db } = useContext(DataContext);
+    const { attendance: records } = db;
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
     const calculateDuration = (start: string | null, end: string | null): string => {
@@ -668,7 +689,6 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
             overallScore: calculateOverallScore(),
         };
         onSave(finalReview);
-        onClose();
     };
     
     return (
@@ -709,7 +729,10 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
 };
 
 const PerformanceManagement: React.FC = () => {
-    const [reviews, setReviews] = useState<PerformanceReview[]>(MOCK_DB.performanceReviews);
+    const { db, updateDb } = useContext(DataContext);
+    const { performanceReviews, employees, users } = db;
+    const { simulateApiCall } = useApi();
+    
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState<{id: string, name: string} | null>(null);
 
@@ -719,7 +742,10 @@ const PerformanceManagement: React.FC = () => {
     };
 
     const handleSaveReview = (newReview: PerformanceReview) => {
-        setReviews([newReview, ...reviews]);
+        simulateApiCall(async () => {
+            updateDb({ ...db, performanceReviews: [newReview, ...db.performanceReviews] });
+            setFormModalOpen(false);
+        }, "Menyimpan penilaian kinerja...");
     };
 
     return (
@@ -738,9 +764,9 @@ const PerformanceManagement: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {MOCK_DB.employees.filter(e => e.isActive).map(emp => {
-                                const user = MOCK_DB.users.find(u => u.employeeDetails?.id === emp.id);
-                                const lastReview = reviews.filter(r => r.employeeId === emp.id).sort((a,b) => new Date(b.reviewDate).getTime() - new Date(a.reviewDate).getTime())[0];
+                            {employees.filter(e => e.isActive).map(emp => {
+                                const user = users.find(u => u.employeeDetails?.id === emp.id);
+                                const lastReview = performanceReviews.filter(r => r.employeeId === emp.id).sort((a,b) => new Date(b.reviewDate).getTime() - new Date(a.reviewDate).getTime())[0];
                                 return (
                                     <tr key={emp.id} className="border-b">
                                         <td className="p-3 flex items-center">
@@ -800,7 +826,6 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         onSave(employee.id, payrollInfo);
-        onClose();
     };
 
     return (
@@ -842,8 +867,10 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
 };
 
 const PayrollManagement: React.FC = () => {
-    const [employees, setEmployees] = useState<Employee[]>(MOCK_DB.employees);
-    const [users] = useState<User[]>(MOCK_DB.users);
+    const { db, updateDb } = useContext(DataContext);
+    const { employees, users } = db;
+    const { simulateApiCall } = useApi();
+    
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState<{employee: Employee, user: User} | null>(null);
 
@@ -861,7 +888,11 @@ const PayrollManagement: React.FC = () => {
     };
 
     const handleSavePayroll = (employeeId: string, payrollInfo: PayrollInfo) => {
-        setEmployees(employees.map(emp => emp.id === employeeId ? { ...emp, payrollInfo } : emp));
+        simulateApiCall(async () => {
+            const newEmployees = employees.map(emp => emp.id === employeeId ? { ...emp, payrollInfo } : emp);
+            updateDb({ ...db, employees: newEmployees });
+            closeModal();
+        }, "Menyimpan pengaturan gaji...");
     };
 
     return (
@@ -909,25 +940,78 @@ const PayrollManagement: React.FC = () => {
         </div>
     );
 }
+const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> = ({ reportName, onClose }) => {
+    const [email, setEmail] = useState('');
+    const { simulateApiCall } = useApi();
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email) return;
+
+        simulateApiCall(async () => {
+            console.log(`Simulating email send for ${reportName} to ${email}`);
+            onClose();
+        }, `Mengirim ${reportName} ke ${email}...`, `${reportName} berhasil dikirim.`);
+    };
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Kirim ${reportName} via Email`}>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <Input
+                    label="Alamat Email Penerima"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="contoh@perusahaan.com"
+                    required
+                />
+                <div className="flex justify-end pt-2">
+                    <Button type="button" variant="secondary" onClick={onClose} className="mr-2">Batal</Button>
+                    <Button type="submit" disabled={!email}>Kirim</Button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
 
 const Reports: React.FC = () => {
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+    const [selectedReport, setSelectedReport] = useState('');
+    
+    const openEmailModal = (reportName: string) => {
+        setSelectedReport(reportName);
+        setIsEmailModalOpen(true);
+    }
+    
     return (
         <div>
             <PageTitle title="Laporan" />
             <Card>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="border p-4 rounded-md">
-                        <h3 className="font-semibold text-lg mb-2">Laporan Kehadiran Bulanan</h3>
-                        <p className="text-gray-600 mb-4">Unduh laporan kehadiran terperinci untuk semua karyawan pada bulan yang dipilih.</p>
-                        <Button>Unduh PDF</Button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="border p-4 rounded-md space-y-4">
+                        <h3 className="font-semibold text-lg">Laporan Kehadiran Bulanan</h3>
+                        <p className="text-gray-600">Unduh laporan kehadiran terperinci untuk semua karyawan pada bulan yang dipilih.</p>
+                        <div className="space-x-2">
+                            <Button>Unduh PDF</Button>
+                            <Button variant="secondary" onClick={() => openEmailModal('Laporan Kehadiran')}>Kirim via Email</Button>
+                        </div>
                     </div>
-                    <div className="border p-4 rounded-md">
-                        <h3 className="font-semibold text-lg mb-2">Laporan Ringkasan Cuti</h3>
-                        <p className="text-gray-600 mb-4">Dapatkan ringkasan semua pengajuan cuti yang disetujui, tertunda, dan ditolak.</p>
-                        <Button>Unduh Excel</Button>
+                    <div className="border p-4 rounded-md space-y-4">
+                        <h3 className="font-semibold text-lg">Laporan Ringkasan Cuti</h3>
+                        <p className="text-gray-600">Dapatkan ringkasan semua pengajuan cuti yang disetujui, tertunda, dan ditolak.</p>
+                        <div className="space-x-2">
+                            <Button>Unduh Excel</Button>
+                            <Button variant="secondary" onClick={() => openEmailModal('Laporan Cuti')}>Kirim via Email</Button>
+                        </div>
                     </div>
                 </div>
             </Card>
+            {isEmailModalOpen && (
+                <EmailReportModal 
+                    reportName={selectedReport}
+                    onClose={() => setIsEmailModalOpen(false)}
+                />
+            )}
         </div>
     );
 }
@@ -935,8 +1019,9 @@ const Reports: React.FC = () => {
 
 export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
+    const { db } = useContext(DataContext);
     
-    const pendingRequestsCount = useMemo(() => MOCK_DB.leaveRequests.filter(r => r.status === LeaveStatus.PENDING).length, []);
+    const pendingRequestsCount = useMemo(() => db.leaveRequests.filter(r => r.status === LeaveStatus.PENDING).length, [db.leaveRequests]);
 
     const navLinksWithBadge = useMemo(() => {
         return ADMIN_NAV_LINKS.map(link => {

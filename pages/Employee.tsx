@@ -1,15 +1,19 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { Layout } from '../components/Layout';
-import { EMPLOYEE_NAV_LINKS, ICONS, MOCK_DB, COMPANY_WORK_START_TIME } from '../constants';
+import { EMPLOYEE_NAV_LINKS, ICONS, COMPANY_WORK_START_TIME } from '../constants';
 import { Card, StatCard, PageTitle, Button, Modal, Select, Input, Textarea } from '../components/ui';
 import { AuthContext } from '../App';
 import { LeaveRequest, LeaveStatus, LeaveType, Payroll, PerformanceReview, AttendanceRecord, AttendanceStatus } from '../types';
+import { DataContext } from '../context/DataContext';
+import { useApi } from '../hooks/useApi';
+
 
 const EmployeeDashboard: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const myRequests = MOCK_DB.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
-    const latestRequest = myRequests.length > 0 ? myRequests[0] : null;
+    const { db } = useContext(DataContext);
+    const myRequests = db.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
+    const latestRequest = myRequests.length > 0 ? myRequests.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())[0] : null;
     
     const statusColor = (status: LeaveStatus | undefined) => {
         if (!status) return 'bg-gray-100 text-gray-800';
@@ -80,6 +84,7 @@ const DetailItem: React.FC<{ label: string; value: string | number | undefined }
 
 const MyProfile: React.FC = () => {
     const { user } = useContext(AuthContext);
+    const { simulateApiCall } = useApi();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [requestMessage, setRequestMessage] = useState('');
     const [isNotificationVisible, setIsNotificationVisible] = useState(false);
@@ -89,11 +94,11 @@ const MyProfile: React.FC = () => {
     const employee = user.employeeDetails;
     
     const handleRequestSubmit = () => {
-        console.log("Request for data change:", requestMessage);
-        setIsModalOpen(false);
-        setRequestMessage('');
-        setIsNotificationVisible(true);
-        setTimeout(() => setIsNotificationVisible(false), 3000);
+        simulateApiCall(async () => {
+            console.log("Request for data change:", requestMessage);
+            setIsModalOpen(false);
+            setRequestMessage('');
+        }, "Mengirim permintaan perubahan data...", "Permintaan berhasil dikirim ke HR.");
     };
 
     return (
@@ -101,13 +106,6 @@ const MyProfile: React.FC = () => {
             <PageTitle title="Profil Saya">
                  <Button onClick={() => setIsModalOpen(true)}>Ajukan Perubahan Data</Button>
             </PageTitle>
-
-             {isNotificationVisible && (
-                <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6" role="alert">
-                    <p className="font-bold">Berhasil</p>
-                    <p>Permintaan perubahan data Anda telah dikirim ke HR.</p>
-                </div>
-            )}
             
             <Card>
                 <div className="flex flex-col md:flex-row items-start mb-6">
@@ -187,12 +185,12 @@ const MyProfile: React.FC = () => {
 
 const MyAttendance: React.FC = () => {
     const { user } = useContext(AuthContext);
+    const { db, updateDb } = useContext(DataContext);
+    const { simulateApiCall } = useApi();
     const today = new Date().toISOString().split('T')[0];
     const [currentTime, setCurrentTime] = useState(new Date());
 
-    const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>(
-        MOCK_DB.attendance.filter(a => a.employeeId === user?.employeeDetails?.id)
-    );
+    const myAttendanceHistory = db.attendance.filter(a => a.employeeId === user?.employeeDetails?.id);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -201,26 +199,27 @@ const MyAttendance: React.FC = () => {
 
     // Simulating today's record for demo purposes
     const demoToday = '2024-07-30';
-    const todaysRecord = attendanceHistory.find(a => a.date === demoToday);
+    const todaysRecord = myAttendanceHistory.find(a => a.date === demoToday);
     
     const handleClockIn = () => {
         if (!user || !user.employeeDetails || todaysRecord) return;
-
-        const now = new Date();
-        const clockInTime = now.toLocaleTimeString('en-GB');
-        const isLate = clockInTime > COMPANY_WORK_START_TIME;
         
-        const newRecord: AttendanceRecord = {
-            id: `att-${Date.now()}`,
-            employeeId: user.employeeDetails.id,
-            employeeName: user.name,
-            date: today,
-            clockIn: clockInTime,
-            clockOut: null,
-            status: isLate ? AttendanceStatus.LATE : AttendanceStatus.ON_TIME
-        };
-        setAttendanceHistory([newRecord, ...attendanceHistory]);
-        alert(`Clock In berhasil pada ${clockInTime}`);
+        simulateApiCall(async () => {
+            const now = new Date();
+            const clockInTime = now.toLocaleTimeString('en-GB');
+            const isLate = clockInTime > COMPANY_WORK_START_TIME;
+            
+            const newRecord: AttendanceRecord = {
+                id: `att-${Date.now()}`,
+                employeeId: user.employeeDetails.id,
+                employeeName: user.name,
+                date: today,
+                clockIn: clockInTime,
+                clockOut: null,
+                status: isLate ? AttendanceStatus.LATE : AttendanceStatus.ON_TIME
+            };
+            updateDb({ ...db, attendance: [newRecord, ...db.attendance] });
+        }, "Melakukan Clock In...", `Clock In berhasil pada ${new Date().toLocaleTimeString('en-GB')}`);
     };
 
     const calculateDuration = (start: string, end: string): string => {
@@ -234,18 +233,17 @@ const MyAttendance: React.FC = () => {
 
     const handleClockOut = () => {
         if (!todaysRecord) return;
-        const clockOutTime = new Date().toLocaleTimeString('en-GB');
-        
-        const updatedRecord: AttendanceRecord = {
-            ...todaysRecord,
-            clockOut: clockOutTime,
-            workDuration: todaysRecord.clockIn ? calculateDuration(todaysRecord.clockIn, clockOutTime) : undefined
-        };
 
-        setAttendanceHistory(
-            attendanceHistory.map(a => a.id === todaysRecord.id ? updatedRecord : a)
-        );
-         alert(`Clock Out berhasil pada ${clockOutTime}`);
+        simulateApiCall(async () => {
+            const clockOutTime = new Date().toLocaleTimeString('en-GB');
+            const updatedRecord: AttendanceRecord = {
+                ...todaysRecord,
+                clockOut: clockOutTime,
+                workDuration: todaysRecord.clockIn ? calculateDuration(todaysRecord.clockIn, clockOutTime) : undefined
+            };
+            const newAttendance = db.attendance.map(a => a.id === todaysRecord.id ? updatedRecord : a);
+            updateDb({ ...db, attendance: newAttendance });
+        }, "Melakukan Clock Out...", `Clock Out berhasil pada ${new Date().toLocaleTimeString('en-GB')}`);
     };
 
     const getStatusChip = (record: AttendanceRecord | undefined) => {
@@ -322,7 +320,7 @@ const MyAttendance: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {attendanceHistory.slice(0, 7).map(rec => (
+                            {myAttendanceHistory.slice(0, 7).map(rec => (
                                 <tr key={rec.id} className="border-b">
                                     <td className="p-3">{rec.date}</td>
                                     <td className="p-3">{rec.clockIn}</td>
@@ -335,7 +333,7 @@ const MyAttendance: React.FC = () => {
                                     </td>
                                 </tr>
                             ))}
-                             {attendanceHistory.length === 0 && (
+                             {myAttendanceHistory.length === 0 && (
                                 <tr><td colSpan={5} className="text-center p-4 text-gray-500">Tidak ada riwayat absensi.</td></tr>
                              )}
                         </tbody>
@@ -349,20 +347,26 @@ const MyAttendance: React.FC = () => {
 
 const MyLeave: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const [myRequests, setMyRequests] = useState<LeaveRequest[]>(MOCK_DB.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id));
+    const { db, updateDb } = useContext(DataContext);
+    const { simulateApiCall } = useApi();
+    const myRequests = db.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const handleApplyLeave = (newRequest: Omit<LeaveRequest, 'id' | 'employeeId' | 'employeeName' | 'status'>) => {
         if(!user || !user.employeeDetails) return;
-        const request: LeaveRequest = {
-            id: `leave-${Date.now()}`,
-            employeeId: user.employeeDetails.id,
-            employeeName: user.name,
-            status: LeaveStatus.PENDING,
-            ...newRequest
-        };
-        setMyRequests([request, ...myRequests]);
-        setIsModalOpen(false);
+        
+        simulateApiCall(async () => {
+            const request: LeaveRequest = {
+                id: `leave-${Date.now()}`,
+                employeeId: user.employeeDetails.id,
+                employeeName: user.name,
+                status: LeaveStatus.PENDING,
+                ...newRequest
+            };
+            updateDb({ ...db, leaveRequests: [request, ...db.leaveRequests] });
+            setIsModalOpen(false);
+        }, "Mengirim pengajuan cuti...");
     };
     
     const statusColor = (status: LeaveStatus) => {
@@ -554,12 +558,18 @@ const PerformanceReviewDetailModal: React.FC<{ review: PerformanceReview; onSave
 
 const MyPerformance: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const [myReviews, setMyReviews] = useState<PerformanceReview[]>(MOCK_DB.performanceReviews.filter(r => r.employeeId === user?.employeeDetails?.id));
+    const { db, updateDb } = useContext(DataContext);
+    const { simulateApiCall } = useApi();
+    const myReviews = db.performanceReviews.filter(r => r.employeeId === user?.employeeDetails?.id);
+
     const [selectedReview, setSelectedReview] = useState<PerformanceReview | null>(null);
 
     const handleSaveFeedback = (reviewId: string, feedback: string) => {
-        setMyReviews(myReviews.map(r => r.id === reviewId ? { ...r, employeeFeedback: feedback } : r));
-        setSelectedReview(null); // Close modal on save
+        simulateApiCall(async () => {
+            const newReviews = db.performanceReviews.map(r => r.id === reviewId ? { ...r, employeeFeedback: feedback } : r);
+            updateDb({ ...db, performanceReviews: newReviews });
+            setSelectedReview(null); // Close modal on save
+        }, "Mengirim tanggapan Anda...");
     };
     
     return (
@@ -667,7 +677,8 @@ const PayslipDetailModal: React.FC<{ payslip: Payroll; onClose: () => void }> = 
 
 const MyPayslips: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const myPayslips = MOCK_DB.payrolls.filter(p => p.employeeId === user?.employeeDetails?.id);
+    const { db } = useContext(DataContext);
+    const myPayslips = db.payrolls.filter(p => p.employeeId === user?.employeeDetails?.id);
     const [selectedPayslip, setSelectedPayslip] = useState<Payroll | null>(null);
 
     return (
