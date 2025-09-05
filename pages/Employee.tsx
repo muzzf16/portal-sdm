@@ -1,5 +1,5 @@
-
 import React, { useState, useContext, useEffect } from 'react';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { Layout } from '../components/Layout';
 import { EMPLOYEE_NAV_LINKS, ICONS, MOCK_DB, COMPANY_WORK_START_TIME } from '../constants';
 import { Card, StatCard, PageTitle, Button, Modal, Select, Input, Textarea } from '../components/ui';
@@ -462,6 +462,14 @@ const PerformanceReviewDetailModal: React.FC<{ review: PerformanceReview; onSave
         return 'text-red-600';
     };
 
+    const getBarFillColor = (score: number) => {
+        if (score >= 4) return '#16a34a'; // green-600
+        if (score >= 3) return '#2563eb'; // blue-600
+        if (score >= 2) return '#ca8a04'; // yellow-600
+        return '#dc2626'; // red-600
+    };
+
+
     return (
         <Modal isOpen={true} onClose={onClose} title={`Detail Kinerja - ${review.period}`}>
             <div className="max-h-[75vh] overflow-y-auto pr-2 space-y-6">
@@ -473,18 +481,41 @@ const PerformanceReviewDetailModal: React.FC<{ review: PerformanceReview; onSave
 
                 <div>
                     <h4 className="font-semibold text-lg mb-2">Rincian KPI</h4>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                         {review.kpis.map(kpi => (
                             <div key={kpi.id} className="p-3 border rounded-md">
-                                <div className="flex justify-between items-start">
-                                    <p className="font-semibold">{kpi.metric}</p>
-                                    <p className={`font-bold text-xl ${scoreColor(kpi.score)}`}>{kpi.score}</p>
+                                <div className="grid grid-cols-3 gap-4 items-center">
+                                    <div className="col-span-2">
+                                        <div className="flex justify-between items-start">
+                                            <p className="font-semibold pr-2">{kpi.metric}</p>
+                                            <p className={`font-bold text-xl flex-shrink-0 ${scoreColor(kpi.score)}`}>{kpi.score}/5</p>
+                                        </div>
+                                        <div className="text-sm text-gray-600 grid grid-cols-2 gap-x-4 mt-1">
+                                            <p><strong>Target:</strong> {kpi.target}</p>
+                                            <p><strong>Hasil:</strong> {kpi.result}</p>
+                                        </div>
+                                        {kpi.notes && <p className="text-xs text-gray-500 mt-2"><em>Catatan: {kpi.notes}</em></p>}
+                                    </div>
+                                    <div className="col-span-1">
+                                        <ResponsiveContainer width="100%" height={40}>
+                                            <BarChart
+                                                layout="vertical"
+                                                data={[{ name: 'Skor', score: kpi.score }]}
+                                                margin={{ top: 5, right: 0, left: 0, bottom: 5 }}
+                                            >
+                                                <XAxis type="number" domain={[0, 5]} hide />
+                                                <YAxis type="category" dataKey="name" hide />
+                                                <Tooltip 
+                                                    cursor={{fill: 'transparent'}} 
+                                                    formatter={(value: number) => [`${value} / 5`, 'Skor']}
+                                                />
+                                                <Bar dataKey="score" barSize={15} background={{ fill: '#eee', radius: 4 }} radius={4}>
+                                                    <Cell fill={getBarFillColor(kpi.score)} />
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </div>
-                                <div className="text-sm text-gray-600 grid grid-cols-2 gap-x-4 mt-1">
-                                    <p><strong>Target:</strong> {kpi.target}</p>
-                                    <p><strong>Hasil:</strong> {kpi.result}</p>
-                                </div>
-                                {kpi.notes && <p className="text-xs text-gray-500 mt-2"><em>Catatan: {kpi.notes}</em></p>}
                             </div>
                         ))}
                     </div>
