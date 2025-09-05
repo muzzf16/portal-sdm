@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Sistem Manajemen SDM",
+  "description": "Sistem Manajemen Sumber Daya Manusia yang komprehensif untuk mengelola karyawan, cuti, penggajian, dan kinerja. Aplikasi ini menyediakan antarmuka terpisah untuk Admin (SDM) dan Karyawan dengan kontrol akses berbasis peran.",
+  "requestFramePermissions": []
+}
