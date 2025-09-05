@@ -116,9 +116,43 @@ export interface Payroll {
 
 export interface KPI {
     id: string;
-    employeeId: string;
     metric: string;
     target: string;
     result: string;
-    period: string;
+    weight: number; // 0 to 1
+    score: number; // 1 to 5
+    notes?: string;
+}
+
+export interface PerformanceReview {
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    period: string; // e.g., "Q3 2024"
+    reviewerName: string; // e.g., "Admin SDM"
+    reviewDate: string;
+    overallScore: number;
+    status: 'Completed' | 'In Progress';
+    strengths: string;
+    areasForImprovement: string;
+    employeeFeedback?: string;
+    kpis: KPI[];
+}
+
+export enum AttendanceStatus {
+    ON_TIME = 'Tepat Waktu',
+    LATE = 'Terlambat',
+    ABSENT = 'Absen',
+}
+
+export interface AttendanceRecord {
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    date: string; // YYYY-MM-DD
+    clockIn: string | null; // HH:mm:ss
+    clockOut: string | null; // HH:mm:ss
+    status: AttendanceStatus;
+    workDuration?: string; // e.g., "8j 15m"
+    notes?: string;
 }

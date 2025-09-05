@@ -1,9 +1,10 @@
+
 import React, { useState, useMemo, Fragment } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Layout } from '../components/Layout';
 import { ADMIN_NAV_LINKS, MOCK_DB, ICONS, attendanceData } from '../constants';
 import { Card, StatCard, Modal, Button, Input, Select, PageTitle, Textarea } from '../components/ui';
-import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent } from '../types';
+import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus } from '../types';
 
 const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
     const [isVisible, setIsVisible] = useState(true);
@@ -526,6 +527,251 @@ const LeaveManagement: React.FC = () => {
     );
 };
 
+const AttendanceManagement: React.FC = () => {
+    const [records, setRecords] = useState<AttendanceRecord[]>(MOCK_DB.attendance);
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+    const calculateDuration = (start: string | null, end: string | null): string => {
+        if (!start || !end) return '-';
+        const today = new Date().toISOString().split('T')[0];
+        const startTime = new Date(`${today}T${start}`);
+        const endTime = new Date(`${today}T${end}`);
+        const diffMs = endTime.getTime() - startTime.getTime();
+        if (diffMs < 0) return '-';
+        const diffHrs = Math.floor(diffMs / 3600000);
+        const diffMins = Math.floor((diffMs % 3600000) / 60000);
+        return `${diffHrs}j ${diffMins}m`;
+    };
+
+    const filteredRecords = useMemo(() => {
+        // To show today's data correctly, we'll use a fixed date for the demo
+        const demoToday = '2024-07-30';
+        if (selectedDate === new Date().toISOString().split('T')[0]) {
+             return records.filter(r => r.date === demoToday);
+        }
+        return records.filter(r => r.date === selectedDate);
+    }, [records, selectedDate]);
+    
+    const getStatusChip = (status: AttendanceStatus) => {
+        let color = '';
+        switch(status) {
+            case AttendanceStatus.ON_TIME:
+                color = 'bg-green-100 text-green-800';
+                break;
+            case AttendanceStatus.LATE:
+                color = 'bg-red-100 text-red-800';
+                break;
+            default:
+                color = 'bg-gray-100 text-gray-800';
+        }
+        return <span className={`px-2 py-1 rounded-full text-xs font-semibold ${color}`}>{status}</span>;
+    }
+
+    return (
+        <div>
+            <PageTitle title="Manajemen Absensi">
+                <Input 
+                    label=""
+                    type="date"
+                    value={selectedDate}
+                    onChange={e => setSelectedDate(e.target.value)}
+                />
+            </PageTitle>
+            <Card>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="p-3">Karyawan</th>
+                                <th className="p-3">Clock In</th>
+                                <th className="p-3">Clock Out</th>
+                                <th className="p-3">Durasi Kerja</th>
+                                <th className="p-3">Status</th>
+                                <th className="p-3">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredRecords.map(rec => (
+                                <tr key={rec.id} className="border-b">
+                                    <td className="p-3">{rec.employeeName}</td>
+                                    <td className="p-3">{rec.clockIn}</td>
+                                    <td className="p-3">{rec.clockOut || 'Belum Clock Out'}</td>
+                                    <td className="p-3">{calculateDuration(rec.clockIn, rec.clockOut)}</td>
+                                    <td className="p-3">{getStatusChip(rec.status)}</td>
+                                    <td className="p-3">
+                                        <Button variant="secondary" className="text-xs">Ubah</Button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredRecords.length === 0 && (
+                                <tr>
+                                    <td colSpan={6} className="text-center p-4 text-gray-500">
+                                        Tidak ada data absensi untuk tanggal ini.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+        </div>
+    );
+};
+
+
+const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string}, onSave: (review: PerformanceReview) => void, onClose: () => void }> = ({ employee, onSave, onClose }) => {
+    const defaultKpi: Omit<KPI, 'id'> = { metric: '', target: '', result: '', weight: 0, score: 3, notes: '' };
+    const [reviewData, setReviewData] = useState<Omit<PerformanceReview, 'id' | 'employeeId' | 'employeeName' | 'overallScore'>>({
+        period: 'Q3 2024',
+        reviewerName: 'Admin SDM',
+        reviewDate: new Date().toISOString().split('T')[0],
+        status: 'Completed',
+        strengths: '',
+        areasForImprovement: '',
+        kpis: [ { ...defaultKpi, id: `kpi-${Date.now()}` } ],
+    });
+
+    const handleDataChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setReviewData({ ...reviewData, [e.target.name]: e.target.value });
+    };
+
+    const handleKpiChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const kpis = [...reviewData.kpis];
+        kpis[index] = { ...kpis[index], [e.target.name]: e.target.name === 'weight' || e.target.name === 'score' ? Number(e.target.value) : e.target.value };
+        setReviewData({ ...reviewData, kpis });
+    };
+
+    const addKpi = () => {
+        setReviewData({ ...reviewData, kpis: [...reviewData.kpis, { ...defaultKpi, id: `kpi-${Date.now()}` }] });
+    };
+
+    const removeKpi = (index: number) => {
+        const kpis = [...reviewData.kpis];
+        kpis.splice(index, 1);
+        setReviewData({ ...reviewData, kpis });
+    };
+
+    const calculateOverallScore = () => {
+        const totalWeight = reviewData.kpis.reduce((sum, kpi) => sum + kpi.weight, 0);
+        if (totalWeight === 0) return 0;
+        const weightedScore = reviewData.kpis.reduce((sum, kpi) => sum + (kpi.score * kpi.weight), 0);
+        return parseFloat((weightedScore / totalWeight).toFixed(2));
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const finalReview: PerformanceReview = {
+            ...reviewData,
+            id: `pr-${Date.now()}`,
+            employeeId: employee.id,
+            employeeName: employee.name,
+            overallScore: calculateOverallScore(),
+        };
+        onSave(finalReview);
+        onClose();
+    };
+    
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Buat Penilaian Kinerja: ${employee.name}`}>
+            <form onSubmit={handleSubmit} className="space-y-6 max-h-[75vh] overflow-y-auto pr-2">
+                <Input label="Periode Penilaian" name="period" value={reviewData.period} onChange={handleDataChange} placeholder="Contoh: Q3 2024" required />
+
+                <fieldset className="border p-4 rounded-md">
+                    <legend className="px-2 font-semibold">Key Performance Indicators (KPI)</legend>
+                    {reviewData.kpis.map((kpi, index) => (
+                        <div key={kpi.id} className="grid grid-cols-12 gap-2 mb-3 p-2 border rounded relative">
+                            <div className="col-span-12"><Input label="Metrik" name="metric" value={kpi.metric} onChange={(e) => handleKpiChange(index, e)} placeholder="Contoh: Penyelesaian Tugas" /></div>
+                            <div className="col-span-6"><Input label="Target" name="target" value={kpi.target} onChange={(e) => handleKpiChange(index, e)} /></div>
+                            <div className="col-span-6"><Input label="Hasil" name="result" value={kpi.result} onChange={(e) => handleKpiChange(index, e)} /></div>
+                            <div className="col-span-6"><Input label="Bobot (0-1)" name="weight" type="number" step="0.1" min="0" max="1" value={kpi.weight} onChange={(e) => handleKpiChange(index, e)} /></div>
+                            <div className="col-span-6"><Input label="Skor (1-5)" name="score" type="number" min="1" max="5" value={kpi.score} onChange={(e) => handleKpiChange(index, e)} /></div>
+                            <button type="button" onClick={() => removeKpi(index)} className="absolute -top-2 -right-2 text-red-500 bg-white rounded-full p-0.5 hover:text-red-700">&times;</button>
+                        </div>
+                    ))}
+                    <Button type="button" variant="secondary" onClick={addKpi}>+ Tambah KPI</Button>
+                </fieldset>
+
+                <fieldset className="border p-4 rounded-md">
+                    <legend className="px-2 font-semibold">Umpan Balik Kualitatif</legend>
+                    <div className="space-y-4">
+                        <Textarea label="Kekuatan" name="strengths" value={reviewData.strengths} onChange={handleDataChange} rows={3} />
+                        <Textarea label="Area untuk Peningkatan" name="areasForImprovement" value={reviewData.areasForImprovement} onChange={handleDataChange} rows={3} />
+                    </div>
+                </fieldset>
+                
+                <div className="flex justify-end pt-4 border-t">
+                    <Button type="button" variant="secondary" onClick={onClose} className="mr-2">Batal</Button>
+                    <Button type="submit">Simpan Penilaian</Button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
+const PerformanceManagement: React.FC = () => {
+    const [reviews, setReviews] = useState<PerformanceReview[]>(MOCK_DB.performanceReviews);
+    const [isFormModalOpen, setFormModalOpen] = useState(false);
+    const [selectedEmployee, setSelectedEmployee] = useState<{id: string, name: string} | null>(null);
+
+    const openFormModal = (employee: {id: string, name: string}) => {
+        setSelectedEmployee(employee);
+        setFormModalOpen(true);
+    };
+
+    const handleSaveReview = (newReview: PerformanceReview) => {
+        setReviews([newReview, ...reviews]);
+    };
+
+    return (
+        <div>
+            <PageTitle title="Manajemen Kinerja" />
+            <Card>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="p-3">Karyawan</th>
+                                <th className="p-3">Jabatan</th>
+                                <th className="p-3">Penilaian Terakhir</th>
+                                <th className="p-3">Skor Terakhir</th>
+                                <th className="p-3">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {MOCK_DB.employees.filter(e => e.isActive).map(emp => {
+                                const user = MOCK_DB.users.find(u => u.employeeDetails?.id === emp.id);
+                                const lastReview = reviews.filter(r => r.employeeId === emp.id).sort((a,b) => new Date(b.reviewDate).getTime() - new Date(a.reviewDate).getTime())[0];
+                                return (
+                                    <tr key={emp.id} className="border-b">
+                                        <td className="p-3 flex items-center">
+                                            <img src={emp.avatarUrl} className="w-10 h-10 rounded-full object-cover mr-3" alt={user?.name} />
+                                            {user?.name}
+                                        </td>
+                                        <td className="p-3">{emp.position}</td>
+                                        <td className="p-3">{lastReview?.period || 'Belum ada'}</td>
+                                        <td className="p-3">{lastReview?.overallScore || '-'}</td>
+                                        <td className="p-3">
+                                            <Button variant="secondary" className="mr-2 text-xs">Lihat Riwayat</Button>
+                                            <Button onClick={() => user && openFormModal({id: emp.id, name: user.name})} className="text-xs">Buat Penilaian</Button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+            {isFormModalOpen && selectedEmployee && (
+                <PerformanceReviewFormModal 
+                    employee={selectedEmployee} 
+                    onSave={handleSaveReview}
+                    onClose={() => setFormModalOpen(false)}
+                />
+            )}
+        </div>
+    );
+};
+
 const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (employeeId: string, payrollInfo: PayrollInfo) => void; onClose: () => void; }> = ({ employee, user, onSave, onClose }) => {
     const [payrollInfo, setPayrollInfo] = useState<PayrollInfo>(employee.payrollInfo);
 
@@ -706,7 +952,9 @@ export const AdminPage: React.FC = () => {
         switch (activeView) {
             case 'dashboard': return <AdminDashboard pendingRequestsCount={pendingRequestsCount} setActiveView={setActiveView} />;
             case 'employees': return <EmployeeManagement />;
+            case 'attendance': return <AttendanceManagement />;
             case 'leaves': return <LeaveManagement />;
+            case 'performance': return <PerformanceManagement />;
             case 'payroll': return <PayrollManagement />;
             case 'reports': return <Reports />;
             default: return <AdminDashboard pendingRequestsCount={pendingRequestsCount} setActiveView={setActiveView}/>;

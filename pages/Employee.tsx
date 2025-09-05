@@ -1,9 +1,10 @@
-import React, { useState, useContext } from 'react';
+
+import React, { useState, useContext, useEffect } from 'react';
 import { Layout } from '../components/Layout';
-import { EMPLOYEE_NAV_LINKS, ICONS, MOCK_DB } from '../constants';
+import { EMPLOYEE_NAV_LINKS, ICONS, MOCK_DB, COMPANY_WORK_START_TIME } from '../constants';
 import { Card, StatCard, PageTitle, Button, Modal, Select, Input, Textarea } from '../components/ui';
 import { AuthContext } from '../App';
-import { LeaveRequest, LeaveStatus, LeaveType, Payroll } from '../types';
+import { LeaveRequest, LeaveStatus, LeaveType, Payroll, PerformanceReview, AttendanceRecord, AttendanceStatus } from '../types';
 
 const EmployeeDashboard: React.FC = () => {
     const { user } = useContext(AuthContext);
@@ -184,6 +185,168 @@ const MyProfile: React.FC = () => {
     );
 };
 
+const MyAttendance: React.FC = () => {
+    const { user } = useContext(AuthContext);
+    const today = new Date().toISOString().split('T')[0];
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>(
+        MOCK_DB.attendance.filter(a => a.employeeId === user?.employeeDetails?.id)
+    );
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // Simulating today's record for demo purposes
+    const demoToday = '2024-07-30';
+    const todaysRecord = attendanceHistory.find(a => a.date === demoToday);
+    
+    const handleClockIn = () => {
+        if (!user || !user.employeeDetails || todaysRecord) return;
+
+        const now = new Date();
+        const clockInTime = now.toLocaleTimeString('en-GB');
+        const isLate = clockInTime > COMPANY_WORK_START_TIME;
+        
+        const newRecord: AttendanceRecord = {
+            id: `att-${Date.now()}`,
+            employeeId: user.employeeDetails.id,
+            employeeName: user.name,
+            date: today,
+            clockIn: clockInTime,
+            clockOut: null,
+            status: isLate ? AttendanceStatus.LATE : AttendanceStatus.ON_TIME
+        };
+        setAttendanceHistory([newRecord, ...attendanceHistory]);
+        alert(`Clock In berhasil pada ${clockInTime}`);
+    };
+
+    const calculateDuration = (start: string, end: string): string => {
+        const startTime = new Date(`${today}T${start}`);
+        const endTime = new Date(`${today}T${end}`);
+        const diffMs = endTime.getTime() - startTime.getTime();
+        const diffHrs = Math.floor(diffMs / 3600000);
+        const diffMins = Math.floor((diffMs % 3600000) / 60000);
+        return `${diffHrs}j ${diffMins}m`;
+    };
+
+    const handleClockOut = () => {
+        if (!todaysRecord) return;
+        const clockOutTime = new Date().toLocaleTimeString('en-GB');
+        
+        const updatedRecord: AttendanceRecord = {
+            ...todaysRecord,
+            clockOut: clockOutTime,
+            workDuration: todaysRecord.clockIn ? calculateDuration(todaysRecord.clockIn, clockOutTime) : undefined
+        };
+
+        setAttendanceHistory(
+            attendanceHistory.map(a => a.id === todaysRecord.id ? updatedRecord : a)
+        );
+         alert(`Clock Out berhasil pada ${clockOutTime}`);
+    };
+
+    const getStatusChip = (record: AttendanceRecord | undefined) => {
+        if (!record || !record.clockIn) return <span className="text-gray-500">Belum Hadir</span>;
+        
+        const color = record.status === AttendanceStatus.LATE ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800';
+        return <span className={`px-3 py-1 rounded-full text-sm font-semibold ${color}`}>{record.status}</span>;
+    }
+
+    return (
+        <div>
+            <PageTitle title="Absensi Saya" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="text-center flex flex-col items-center justify-center">
+                    <p className="text-lg text-gray-600">Jam Saat Ini</p>
+                    <p className="text-6xl font-bold text-primary-700 tracking-wider my-4">
+                        {currentTime.toLocaleTimeString('en-GB')}
+                    </p>
+                    <div className="flex space-x-4 mt-4">
+                        <Button 
+                            onClick={handleClockIn}
+                            disabled={!!todaysRecord?.clockIn}
+                            className="w-32"
+                        >
+                            Clock In
+                        </Button>
+                        <Button 
+                            variant="secondary"
+                            onClick={handleClockOut}
+                            disabled={!todaysRecord?.clockIn || !!todaysRecord?.clockOut}
+                            className="w-32"
+                        >
+                            Clock Out
+                        </Button>
+                    </div>
+                </Card>
+                <Card>
+                    <h3 className="font-semibold text-xl mb-4">Status Hari Ini</h3>
+                    <div className="space-y-3 text-lg">
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Tanggal:</span>
+                            <span className="font-semibold">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Status Kehadiran:</span>
+                            {getStatusChip(todaysRecord)}
+                        </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Waktu Masuk:</span>
+                            <span className="font-semibold">{todaysRecord?.clockIn || '-'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Waktu Keluar:</span>
+                            <span className="font-semibold">{todaysRecord?.clockOut || '-'}</span>
+                        </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Durasi Kerja:</span>
+                            <span className="font-semibold">{todaysRecord?.workDuration || '-'}</span>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+            <Card className="mt-6">
+                 <h3 className="font-semibold text-xl mb-4">Riwayat Absensi (7 Hari Terakhir)</h3>
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="p-3">Tanggal</th>
+                                <th className="p-3">Clock In</th>
+                                <th className="p-3">Clock Out</th>
+                                <th className="p-3">Durasi</th>
+                                <th className="p-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {attendanceHistory.slice(0, 7).map(rec => (
+                                <tr key={rec.id} className="border-b">
+                                    <td className="p-3">{rec.date}</td>
+                                    <td className="p-3">{rec.clockIn}</td>
+                                    <td className="p-3">{rec.clockOut || '-'}</td>
+                                    <td className="p-3">{rec.workDuration || '-'}</td>
+                                    <td className="p-3">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${rec.status === AttendanceStatus.LATE ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                            {rec.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                             {attendanceHistory.length === 0 && (
+                                <tr><td colSpan={5} className="text-center p-4 text-gray-500">Tidak ada riwayat absensi.</td></tr>
+                             )}
+                        </tbody>
+                    </table>
+                 </div>
+            </Card>
+        </div>
+    );
+};
+
+
 const MyLeave: React.FC = () => {
     const { user } = useContext(AuthContext);
     const [myRequests, setMyRequests] = useState<LeaveRequest[]>(MOCK_DB.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id));
@@ -284,6 +447,117 @@ const LeaveApplicationForm: React.FC<{onClose: () => void, onSubmit: (data: any)
         </Modal>
     );
 };
+
+const PerformanceReviewDetailModal: React.FC<{ review: PerformanceReview; onSaveFeedback: (reviewId: string, feedback: string) => void; onClose: () => void; }> = ({ review, onSaveFeedback, onClose }) => {
+    const [employeeFeedback, setEmployeeFeedback] = useState(review.employeeFeedback || '');
+
+    const handleSave = () => {
+        onSaveFeedback(review.id, employeeFeedback);
+    };
+
+    const scoreColor = (score: number) => {
+        if (score >= 4) return 'text-green-600';
+        if (score >= 3) return 'text-blue-600';
+        if (score >= 2) return 'text-yellow-600';
+        return 'text-red-600';
+    };
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Detail Kinerja - ${review.period}`}>
+            <div className="max-h-[75vh] overflow-y-auto pr-2 space-y-6">
+                <div className="p-4 bg-gray-50 rounded-lg text-center">
+                    <p className="text-sm text-gray-500">SKOR KESELURUHAN</p>
+                    <p className={`text-5xl font-bold ${scoreColor(review.overallScore)}`}>{review.overallScore.toFixed(1)}</p>
+                    <p className="text-xs text-gray-500 mt-1">Dinilai oleh {review.reviewerName} pada {review.reviewDate}</p>
+                </div>
+
+                <div>
+                    <h4 className="font-semibold text-lg mb-2">Rincian KPI</h4>
+                    <div className="space-y-3">
+                        {review.kpis.map(kpi => (
+                            <div key={kpi.id} className="p-3 border rounded-md">
+                                <div className="flex justify-between items-start">
+                                    <p className="font-semibold">{kpi.metric}</p>
+                                    <p className={`font-bold text-xl ${scoreColor(kpi.score)}`}>{kpi.score}</p>
+                                </div>
+                                <div className="text-sm text-gray-600 grid grid-cols-2 gap-x-4 mt-1">
+                                    <p><strong>Target:</strong> {kpi.target}</p>
+                                    <p><strong>Hasil:</strong> {kpi.result}</p>
+                                </div>
+                                {kpi.notes && <p className="text-xs text-gray-500 mt-2"><em>Catatan: {kpi.notes}</em></p>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <h4 className="font-semibold text-lg mb-2">Umpan Balik Penilai</h4>
+                    <div className="bg-blue-50 p-3 rounded-md">
+                        <p className="font-semibold">Kekuatan:</p>
+                        <p className="text-gray-700 text-sm mb-2">{review.strengths}</p>
+                        <p className="font-semibold">Area Peningkatan:</p>
+                        <p className="text-gray-700 text-sm">{review.areasForImprovement}</p>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 className="font-semibold text-lg mb-2">Tanggapan Anda</h4>
+                    <Textarea 
+                        label=""
+                        value={employeeFeedback}
+                        onChange={(e) => setEmployeeFeedback(e.target.value)}
+                        placeholder="Berikan tanggapan Anda di sini..."
+                        rows={4}
+                        disabled={!!review.employeeFeedback}
+                    />
+                     {review.employeeFeedback && <p className="text-xs text-gray-500 mt-1">Tanggapan sudah dikirim dan tidak bisa diubah.</p>}
+                </div>
+            </div>
+             <div className="flex justify-end pt-6 mt-4 border-t">
+                <Button variant="secondary" onClick={onClose} className="mr-2">Tutup</Button>
+                {!review.employeeFeedback && <Button onClick={handleSave}>Kirim Tanggapan</Button>}
+            </div>
+        </Modal>
+    );
+};
+
+const MyPerformance: React.FC = () => {
+    const { user } = useContext(AuthContext);
+    const [myReviews, setMyReviews] = useState<PerformanceReview[]>(MOCK_DB.performanceReviews.filter(r => r.employeeId === user?.employeeDetails?.id));
+    const [selectedReview, setSelectedReview] = useState<PerformanceReview | null>(null);
+
+    const handleSaveFeedback = (reviewId: string, feedback: string) => {
+        setMyReviews(myReviews.map(r => r.id === reviewId ? { ...r, employeeFeedback: feedback } : r));
+        setSelectedReview(null); // Close modal on save
+    };
+    
+    return (
+        <div>
+            <PageTitle title="Riwayat Kinerja Saya" />
+            <Card>
+                <ul className="space-y-3">
+                    {myReviews.sort((a,b) => new Date(b.reviewDate).getTime() - new Date(a.reviewDate).getTime()).map(review => (
+                        <li key={review.id} className="p-4 border rounded-md flex justify-between items-center">
+                            <div>
+                                <p className="font-semibold text-lg">Penilaian Kinerja - {review.period}</p>
+                                <p className="text-gray-600">Skor Akhir: <span className="font-bold">{review.overallScore}</span></p>
+                            </div>
+                            <Button variant="secondary" onClick={() => setSelectedReview(review)}>Lihat Detail</Button>
+                        </li>
+                    ))}
+                    {myReviews.length === 0 && <p className="text-center text-gray-500">Belum ada riwayat penilaian kinerja.</p>}
+                </ul>
+            </Card>
+            {selectedReview && (
+                <PerformanceReviewDetailModal 
+                    review={selectedReview} 
+                    onClose={() => setSelectedReview(null)}
+                    onSaveFeedback={handleSaveFeedback}
+                />
+            )}
+        </div>
+    );
+}
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
@@ -395,7 +669,9 @@ export const EmployeePage: React.FC = () => {
         switch (activeView) {
             case 'dashboard': return <EmployeeDashboard />;
             case 'profile': return <MyProfile />;
+            case 'my-attendance': return <MyAttendance />;
             case 'my-leave': return <MyLeave />;
+            case 'my-performance': return <MyPerformance />;
             case 'my-payslips': return <MyPayslips />;
             default: return <EmployeeDashboard />;
         }

@@ -1,19 +1,24 @@
-import { Employee, LeaveRequest, LeaveStatus, LeaveType, Payroll, User, Role } from './types';
+
+import { Employee, LeaveRequest, LeaveStatus, LeaveType, Payroll, User, Role, PerformanceReview, AttendanceRecord, AttendanceStatus } from './types';
 
 export const ICONS = {
     dashboard: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>,
     employees: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197M15 12a4 4 0 110 8 4 4 0 010-8z" /></svg>,
     leave: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
     payroll: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+    performance: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4Z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2Z" /></svg>,
     reports: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
     profile: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
     logout: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>,
+    attendance: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
 };
 
 export const ADMIN_NAV_LINKS = [
     { name: 'Dasbor', icon: ICONS.dashboard, view: 'dashboard' },
     { name: 'Karyawan', icon: ICONS.employees, view: 'employees' },
+    { name: 'Absensi', icon: ICONS.attendance, view: 'attendance' },
     { name: 'Pengajuan Cuti', icon: ICONS.leave, view: 'leaves' },
+    { name: 'Penilaian Kinerja', icon: ICONS.performance, view: 'performance' },
     { name: 'Penggajian', icon: ICONS.payroll, view: 'payroll' },
     { name: 'Laporan', icon: ICONS.reports, view: 'reports' },
 ];
@@ -21,9 +26,13 @@ export const ADMIN_NAV_LINKS = [
 export const EMPLOYEE_NAV_LINKS = [
     { name: 'Dasbor', icon: ICONS.dashboard, view: 'dashboard' },
     { name: 'Profil Saya', icon: ICONS.profile, view: 'profile' },
+    { name: 'Absensi Saya', icon: ICONS.attendance, view: 'my-attendance' },
     { name: 'Cuti Saya', icon: ICONS.leave, view: 'my-leave' },
+    { name: 'Kinerja Saya', icon: ICONS.performance, view: 'my-performance' },
     { name: 'Slip Gaji Saya', icon: ICONS.payroll, view: 'my-payslips' },
 ];
+
+export const COMPANY_WORK_START_TIME = '09:00:00';
 
 // MOCK DATA
 const MOCK_EMPLOYEES: Employee[] = [
@@ -172,12 +181,59 @@ const MOCK_PAYROLLS: Payroll[] = [
     },
 ];
 
+const MOCK_PERFORMANCE_REVIEWS: PerformanceReview[] = [
+    {
+        id: 'pr-001',
+        employeeId: 'emp-001',
+        employeeName: 'Budi Santoso',
+        period: 'Q2 2024',
+        reviewerName: 'Admin SDM',
+        reviewDate: '2024-07-15',
+        overallScore: 4.2,
+        status: 'Completed',
+        strengths: 'Kemampuan coding yang sangat baik pada React, selalu menyelesaikan tugas tepat waktu. Komunikatif dan proaktif dalam tim.',
+        areasForImprovement: 'Perlu meningkatkan pemahaman tentang arsitektur backend untuk kolaborasi yang lebih baik dengan tim backend.',
+        employeeFeedback: 'Terima kasih atas masukannya. Saya akan mengikuti kursus Node.js untuk meningkatkan pemahaman saya.',
+        kpis: [
+            { id: 'kpi-1-1', metric: 'Penyelesaian Tiket JIRA', target: '20 tiket/sprint', result: '22 tiket/sprint', weight: 0.4, score: 5, notes: 'Melebihi target secara konsisten.' },
+            { id: 'kpi-1-2', metric: 'Kualitas Kode (Bug Rate)', target: '< 5 bug kritikal', result: '3 bug kritikal', weight: 0.4, score: 4, notes: 'Kualitas kode baik, beberapa bug minor ditemukan.' },
+            { id: 'kpi-1-3', metric: 'Kehadiran Rapat Tim', target: '100%', result: '95%', weight: 0.2, score: 3, notes: 'Absen sekali karena sakit.' },
+        ]
+    },
+    {
+        id: 'pr-002',
+        employeeId: 'emp-002',
+        employeeName: 'Ani Lestari',
+        period: 'Q2 2024',
+        reviewerName: 'Admin SDM',
+        reviewDate: '2024-07-16',
+        overallScore: 3.8,
+        status: 'Completed',
+        strengths: 'Logika pemecahan masalah yang kuat dan arsitektur database yang efisien.',
+        areasForImprovement: 'Manajemen waktu bisa ditingkatkan, beberapa tugas melewati tenggat waktu.',
+        kpis: [
+            { id: 'kpi-2-1', metric: 'Pengembangan Fitur API', target: '3 fitur utama', result: '3 fitur utama', weight: 0.5, score: 4, notes: 'Semua fitur selesai, namun 1 fitur sedikit terlambat.' },
+            { id: 'kpi-2-2', metric: 'Uptime Layanan', target: '99.9%', result: '99.95%', weight: 0.5, score: 4, notes: 'Layanan sangat stabil.' },
+        ]
+    }
+];
+
+const MOCK_ATTENDANCE_RECORDS: AttendanceRecord[] = [
+    { id: 'att-001', employeeId: 'emp-001', employeeName: 'Budi Santoso', date: '2024-07-29', clockIn: '08:55:10', clockOut: '17:30:05', status: AttendanceStatus.ON_TIME, workDuration: '8j 34m' },
+    { id: 'att-002', employeeId: 'emp-002', employeeName: 'Ani Lestari', date: '2024-07-29', clockIn: '09:15:30', clockOut: '18:00:15', status: AttendanceStatus.LATE, workDuration: '8j 44m' },
+    { id: 'att-003', employeeId: 'emp-004', employeeName: 'Dodi Hidayat', date: '2024-07-29', clockIn: '08:45:00', clockOut: '17:35:20', status: AttendanceStatus.ON_TIME, workDuration: '8j 50m' },
+    { id: 'att-004', employeeId: 'emp-001', employeeName: 'Budi Santoso', date: '2024-07-30', clockIn: '08:58:00', clockOut: '17:32:00', status: AttendanceStatus.ON_TIME, workDuration: '8j 34m' },
+    { id: 'att-005', employeeId: 'emp-002', employeeName: 'Ani Lestari', date: '2024-07-30', clockIn: '09:05:00', clockOut: null, status: AttendanceStatus.LATE },
+];
+
 
 export const MOCK_DB = {
     users: MOCK_USERS,
     employees: MOCK_EMPLOYEES,
     leaveRequests: MOCK_LEAVE_REQUESTS,
-    payrolls: MOCK_PAYROLLS
+    payrolls: MOCK_PAYROLLS,
+    performanceReviews: MOCK_PERFORMANCE_REVIEWS,
+    attendance: MOCK_ATTENDANCE_RECORDS,
 };
 
 export const attendanceData = [
