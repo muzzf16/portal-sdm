@@ -368,9 +368,13 @@ const DetailItem: React.FC<{ label: string; value: string | number | undefined }
 const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose: () => void }> = ({ employee, user, onClose }) => {
     if (!employee || !user) return null;
 
+    const handlePrint = () => {
+        window.print();
+    };
+
     return (
         <Modal isOpen={true} onClose={onClose} title={`Detail Karyawan: ${user.name || ''}`}>
-            <div className="max-h-[75vh] overflow-y-auto pr-4">
+            <div className="max-h-[75vh] overflow-y-auto pr-4 print:max-h-none print:overflow-visible">
                 <div className="flex flex-col md:flex-row items-start mb-6">
                     <img src={employee.avatarUrl} alt="Avatar" className="w-28 h-28 rounded-full object-cover mb-4 md:mb-0 md:mr-6 flex-shrink-0 border-4 border-gray-200" />
                     <div>
@@ -426,8 +430,9 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
                     </ul>
                 </DetailSection>
             </div>
-            <div className="flex justify-end mt-6 pt-4 border-t">
-                <Button onClick={onClose} variant="secondary">Tutup</Button>
+            <div className="flex justify-end mt-6 pt-4 border-t print:hidden">
+                <Button onClick={onClose} variant="secondary" className="mr-2">Tutup</Button>
+                <Button onClick={handlePrint}>Cetak / Unduh</Button>
             </div>
         </Modal>
     );

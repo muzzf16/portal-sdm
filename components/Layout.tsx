@@ -76,7 +76,7 @@ export const Layout: React.FC<LayoutProps> = ({ navLinks, activeView, setActiveV
     const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
     return (
-        <div className="flex h-screen bg-gray-100">
+        <div className="flex h-screen bg-gray-100 print:hidden">
             <Sidebar navLinks={navLinks} activeView={activeView} setActiveView={setActiveView} isSidebarOpen={isSidebarOpen} />
             <div className="flex-1 flex flex-col overflow-hidden">
                 <Header toggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />
