@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useMemo, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { Layout } from '../components/Layout';
 import { EMPLOYEE_NAV_LINKS, ICONS, COMPANY_WORK_START_TIME } from '../constants';
@@ -8,8 +8,35 @@ import { LeaveRequest, LeaveStatus, LeaveType, Payroll, PerformanceReview, Atten
 import { DataContext } from '../context/DataContext';
 import { useApi } from '../hooks/useApi';
 
+const NewPayslipAlert: React.FC<{ payslipPeriod: string; onViewClick: () => void }> = ({ payslipPeriod, onViewClick }) => {
+    const [isVisible, setIsVisible] = useState(true);
 
-const EmployeeDashboard: React.FC = () => {
+    if (!isVisible) {
+        return null;
+    }
+
+    return (
+        <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-4 mb-6 rounded-md shadow-sm flex justify-between items-center" role="alert">
+            <div>
+                <p className="font-bold">Notifikasi Slip Gaji Baru</p>
+                <p>Slip gaji Anda untuk periode <strong>{payslipPeriod}</strong> telah tersedia.</p>
+            </div>
+            <div className="flex items-center">
+                 <Button onClick={onViewClick} className="mr-4 bg-blue-500 hover:bg-blue-600 focus:ring-blue-400 text-white text-sm">
+                    Lihat Slip Gaji
+                </Button>
+                <button onClick={() => setIsVisible(false)} className="text-blue-800 hover:text-blue-900 p-1 rounded-full hover:bg-blue-200">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+const EmployeeDashboard: React.FC<{ latestNewPayslip: Payroll | null, setActiveView: (view: string) => void }> = ({ latestNewPayslip, setActiveView }) => {
     const { user } = useContext(AuthContext);
     const { db } = useContext(DataContext);
     const myRequests = db.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
@@ -26,6 +53,12 @@ const EmployeeDashboard: React.FC = () => {
 
     return (
         <div>
+            {latestNewPayslip && (
+                <NewPayslipAlert 
+                    payslipPeriod={latestNewPayslip.period}
+                    onViewClick={() => setActiveView('my-payslips')}
+                />
+            )}
             <PageTitle title="Dasbor Saya" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <StatCard title="Sisa Cuti" value={`${user?.employeeDetails?.leaveBalance || 0} Hari`} icon={ICONS.leave} color="bg-blue-100 text-blue-600" />
@@ -675,7 +708,11 @@ const PayslipDetailModal: React.FC<{ payslip: Payroll; onClose: () => void }> = 
 };
 
 
-const MyPayslips: React.FC = () => {
+const MyPayslips: React.FC<{ onMount: () => void }> = ({ onMount }) => {
+    useEffect(() => {
+        onMount();
+    }, [onMount]);
+
     const { user } = useContext(AuthContext);
     const { db } = useContext(DataContext);
     const myPayslips = db.payrolls.filter(p => p.employeeId === user?.employeeDetails?.id);
@@ -706,21 +743,70 @@ const MyPayslips: React.FC = () => {
 
 export const EmployeePage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
+    const { user } = useContext(AuthContext);
+    const { db } = useContext(DataContext);
+    const [newPayslips, setNewPayslips] = useState<Payroll[]>([]);
+
+    const VIEWED_PAYSLIPS_KEY = useMemo(() => `hrms_viewed_payslips_${user?.id}`, [user?.id]);
+
+    useEffect(() => {
+        if (!user?.employeeDetails || !VIEWED_PAYSLIPS_KEY) return;
+        
+        const getFromStorage = <T,>(key: string, defaultValue: T): T => {
+            try {
+                const item = localStorage.getItem(key);
+                return item ? JSON.parse(item) : defaultValue;
+            } catch (error) {
+                console.warn(`Error reading from localStorage key “${key}”:`, error);
+                return defaultValue;
+            }
+        };
+
+        const myPayslips = db.payrolls.filter(p => p.employeeId === user.employeeDetails.id);
+        const viewedPayslips = getFromStorage<string[]>(VIEWED_PAYSLIPS_KEY, []);
+        const unreadPayslips = myPayslips
+            .filter(p => !viewedPayslips.includes(p.id))
+            .sort((a, b) => b.id.localeCompare(a.id));
+
+        setNewPayslips(unreadPayslips);
+    }, [db.payrolls, user?.employeeDetails, VIEWED_PAYSLIPS_KEY]);
+
+    const markPayslipsAsViewed = useCallback(() => {
+        if (!user?.employeeDetails || newPayslips.length === 0) return;
+
+        const myCurrentPayslipIds = db.payrolls
+            .filter(p => p.employeeId === user.employeeDetails.id)
+            .map(p => p.id);
+        
+        localStorage.setItem(VIEWED_PAYSLIPS_KEY, JSON.stringify(myCurrentPayslipIds));
+        setNewPayslips([]);
+    }, [db.payrolls, user?.employeeDetails, VIEWED_PAYSLIPS_KEY, newPayslips.length]);
+
+    const navLinksWithBadge = useMemo(() => {
+        return EMPLOYEE_NAV_LINKS.map(link => {
+            if (link.view === 'my-payslips' && newPayslips.length > 0) {
+                return { ...link, badge: newPayslips.length };
+            }
+            return link;
+        });
+    }, [newPayslips.length]);
+
+    const latestNewPayslip = newPayslips.length > 0 ? newPayslips[0] : null;
 
     const renderContent = () => {
         switch (activeView) {
-            case 'dashboard': return <EmployeeDashboard />;
+            case 'dashboard': return <EmployeeDashboard latestNewPayslip={latestNewPayslip} setActiveView={setActiveView} />;
             case 'profile': return <MyProfile />;
             case 'my-attendance': return <MyAttendance />;
             case 'my-leave': return <MyLeave />;
             case 'my-performance': return <MyPerformance />;
-            case 'my-payslips': return <MyPayslips />;
-            default: return <EmployeeDashboard />;
+            case 'my-payslips': return <MyPayslips onMount={markPayslipsAsViewed} />;
+            default: return <EmployeeDashboard latestNewPayslip={latestNewPayslip} setActiveView={setActiveView} />;
         }
     };
     
     return (
-        <Layout navLinks={EMPLOYEE_NAV_LINKS} activeView={activeView} setActiveView={setActiveView}>
+        <Layout navLinks={navLinksWithBadge} activeView={activeView} setActiveView={setActiveView}>
             {renderContent()}
         </Layout>
     );

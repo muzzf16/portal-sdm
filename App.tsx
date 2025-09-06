@@ -43,8 +43,9 @@ const App: React.FC = () => {
 
     const renderAuthenticatedApp = () => {
         if (!user) {
-            // Should not happen with the new routing, but as a fallback.
-            return <Navigate to="/" replace />;
+            // This should not be reached with the new routing logic, but as a safe fallback,
+            // redirect to the login page.
+            return <Navigate to="/login" replace />;
         }
         return user.role === Role.ADMIN ? <AdminPage /> : <EmployeePage />;
     };
@@ -57,16 +58,23 @@ const App: React.FC = () => {
                         <Routes>
                             {user ? (
                                 <>
-                                    {/* All authenticated routes are handled within the Admin/Employee pages */}
+                                    {/* Redirect auth-related pages to the main app dashboard if already logged in */}
+                                    <Route path="/login" element={<Navigate to="/" replace />} />
+                                    <Route path="/register" element={<Navigate to="/" replace />} />
+                                    <Route path="/forgot-password" element={<Navigate to="/" replace />} />
+                                    
+                                    {/* The authenticated app handles all other routes, including the root "/" */}
                                     <Route path="/*" element={renderAuthenticatedApp()} />
                                 </>
                             ) : (
                                 <>
+                                    {/* Publicly accessible routes for non-authenticated users */}
                                     <Route path="/" element={<LandingPage />} />
                                     <Route path="/login" element={<LoginPage />} />
                                     <Route path="/register" element={<RegisterPage />} />
                                     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                                    {/* Redirect any other path to landing if not logged in */}
+                                    
+                                    {/* Redirect any other path to the landing page if not logged in */}
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </>
                             )}
