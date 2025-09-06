@@ -20,7 +20,7 @@ interface DataContextType {
 export const DataContext = createContext<DataContextType>({
     db: initialDb,
     // FIX: Corrected the function signature for the default `updateDb` to match `DataContextType`, which expects one argument.
-    updateDb: (newDb: MockDatabase) => {},
+    updateDb: (newDb: Mockdatabase) => {},
     isLoading: true,
 });
 

@@ -43,8 +43,16 @@ export const LoginPage: React.FC = () => {
                         Masuk sebagai Karyawan
                     </Button>
                  </div>
+                 <div className="text-sm text-center mt-6 flex justify-between">
+                    <Link to="/forgot-password" className="text-primary-600 hover:underline">
+                        Lupa kata sandi?
+                    </Link>
+                    <Link to="/register" className="text-primary-600 hover:underline">
+                        Belum punya akun?
+                    </Link>
+                 </div>
                  <div className="text-center mt-6">
-                    <Link to="/" className="text-sm text-primary-600 hover:underline">
+                    <Link to="/" className="text-sm text-gray-500 hover:underline">
                         &larr; Kembali ke Halaman Utama
                     </Link>
                  </div>

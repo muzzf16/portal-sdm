@@ -3,6 +3,8 @@ import React, { useState, createContext, useMemo, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { User, Role } from './types';
 import { LoginPage } from './pages/Login';
+import { RegisterPage } from './pages/Register';
+import { ForgotPasswordPage } from './pages/ForgotPassword';
 import { AdminPage } from './pages/Admin';
 import { EmployeePage } from './pages/Employee';
 import { DataProvider } from './context/DataContext';
@@ -62,6 +64,8 @@ const App: React.FC = () => {
                                 <>
                                     <Route path="/" element={<LandingPage />} />
                                     <Route path="/login" element={<LoginPage />} />
+                                    <Route path="/register" element={<RegisterPage />} />
+                                    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                                     {/* Redirect any other path to landing if not logged in */}
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </>
