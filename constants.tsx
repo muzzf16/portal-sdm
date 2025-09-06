@@ -34,10 +34,17 @@ export const EMPLOYEE_NAV_LINKS = [
 
 export const COMPANY_WORK_START_TIME = '09:00:00';
 
+export const GOLONGAN_OPTIONS = [
+    'I/a', 'I/b', 'I/c', 'I/d',
+    'II/a', 'II/b', 'II/c', 'II/d',
+    'III/a', 'III/b', 'III/c', 'III/d',
+    'IV/a', 'IV/b', 'IV/c', 'IV/d', 'IV/e'
+];
+
 // MOCK DATA
 const MOCK_EMPLOYEES: Employee[] = [
     { 
-        id: 'emp-001', nip: 'NIP001', grade: 'Staf Senior (3A)', position: 'Pengembang Frontend', joinDate: '2022-01-15', phone: '081234567890', department: 'Teknologi', avatarUrl: 'https://picsum.photos/id/1005/200', leaveBalance: 12, isActive: true,
+        id: 'emp-001', nip: 'NIP001', pangkat: 'Penata Muda Tk. I', golongan: 'III/b', position: 'Pengembang Frontend', joinDate: '2022-01-15', phone: '081234567890', department: 'Teknologi', avatarUrl: 'https://picsum.photos/id/1005/200', leaveBalance: 12, isActive: true,
         address: 'Jl. Merdeka No. 1, Jakarta', pob: 'Jakarta', dob: '1995-05-10', religion: 'Islam', maritalStatus: 'Menikah', numberOfChildren: 1,
         educationHistory: [{ level: 'S1', institution: 'Universitas Indonesia', major: 'Ilmu Komputer', graduationYear: 2017 }],
         workHistory: [{ company: 'Tech Corp', position: 'Junior Frontend Developer', startDate: '2018-01-01', endDate: '2021-12-31' }],
@@ -56,7 +63,7 @@ const MOCK_EMPLOYEES: Employee[] = [
         }
     },
     { 
-        id: 'emp-002', nip: 'NIP002', grade: 'Staf Senior (3B)', position: 'Pengembang Backend', joinDate: '2021-11-20', phone: '081234567891', department: 'Teknologi', avatarUrl: 'https://picsum.photos/id/1012/200', leaveBalance: 10, isActive: true,
+        id: 'emp-002', nip: 'NIP002', pangkat: 'Penata', golongan: 'III/c', position: 'Pengembang Backend', joinDate: '2021-11-20', phone: '081234567891', department: 'Teknologi', avatarUrl: 'https://picsum.photos/id/1012/200', leaveBalance: 10, isActive: true,
         address: 'Jl. Sudirman No. 2, Bandung', pob: 'Bandung', dob: '1993-08-20', religion: 'Kristen', maritalStatus: 'Lajang', numberOfChildren: 0,
         educationHistory: [{ level: 'S1', institution: 'Institut Teknologi Bandung', major: 'Teknik Informatika', graduationYear: 2015 }],
         workHistory: [{ company: 'Data Solutions', position: 'Software Engineer', startDate: '2016-02-01', endDate: '2021-10-31' }],
@@ -75,7 +82,7 @@ const MOCK_EMPLOYEES: Employee[] = [
         }
     },
     { 
-        id: 'emp-003', nip: 'NIP003', grade: 'Staf Junior (2A)', position: 'Desainer UI/UX', joinDate: '2022-03-01', phone: '081234567892', department: 'Desain', avatarUrl: 'https://picsum.photos/id/1027/200', leaveBalance: 14, isActive: false,
+        id: 'emp-003', nip: 'NIP003', pangkat: 'Pengatur', golongan: 'II/c', position: 'Desainer UI/UX', joinDate: '2022-03-01', phone: '081234567892', department: 'Desain', avatarUrl: 'https://picsum.photos/id/1027/200', leaveBalance: 14, isActive: false,
         address: 'Jl. Gajah Mada No. 3, Surabaya', pob: 'Surabaya', dob: '1998-01-15', religion: 'Islam', maritalStatus: 'Lajang', numberOfChildren: 0,
         educationHistory: [{ level: 'D3', institution: 'Politeknik Negeri Surabaya', major: 'Desain Komunikasi Visual', graduationYear: 2019 }],
         workHistory: [],
@@ -83,7 +90,7 @@ const MOCK_EMPLOYEES: Employee[] = [
         payrollInfo: { baseSalary: 8000000, incomes: [], deductions: [] }
     },
     { 
-        id: 'emp-004', nip: 'NIP004', grade: 'Manajer (4A)', position: 'Manajer Proyek', joinDate: '2020-05-10', phone: '081234567893', department: 'Manajemen', avatarUrl: 'https://picsum.photos/id/1025/200', leaveBalance: 8, isActive: true,
+        id: 'emp-004', nip: 'NIP004', pangkat: 'Pembina', golongan: 'IV/a', position: 'Manajer Proyek', joinDate: '2020-05-10', phone: '081234567893', department: 'Manajemen', avatarUrl: 'https://picsum.photos/id/1025/200', leaveBalance: 8, isActive: true,
         address: 'Jl. Pahlawan No. 4, Yogyakarta', pob: 'Yogyakarta', dob: '1990-11-30', religion: 'Katolik', maritalStatus: 'Menikah', numberOfChildren: 2,
         educationHistory: [{ level: 'S2', institution: 'Universitas Gadjah Mada', major: 'Manajemen', graduationYear: 2014 }],
         workHistory: [{ company: 'Creative Agency', position: 'Project Lead', startDate: '2015-01-15', endDate: '2020-04-30' }],
@@ -103,7 +110,7 @@ const MOCK_EMPLOYEES: Employee[] = [
         }
     },
     { 
-        id: 'emp-005', nip: 'NIP005', grade: 'Manajer (4B)', position: 'Spesialis SDM', joinDate: '2019-08-22', phone: '081234567894', department: 'Sumber Daya Manusia', avatarUrl: 'https://picsum.photos/id/10/200', leaveBalance: 12, isActive: true,
+        id: 'emp-005', nip: 'NIP005', pangkat: 'Penata Tk. I', golongan: 'III/d', position: 'Spesialis SDM', joinDate: '2019-08-22', phone: '081234567894', department: 'Sumber Daya Manusia', avatarUrl: 'https://picsum.photos/id/10/200', leaveBalance: 12, isActive: true,
         address: 'Jl. Diponegoro No. 5, Semarang', pob: 'Semarang', dob: '1992-04-25', religion: 'Islam', maritalStatus: 'Menikah', numberOfChildren: 1,
         educationHistory: [{ level: 'S1', institution: 'Universitas Diponegoro', major: 'Psikologi', graduationYear: 2014 }],
         workHistory: [],

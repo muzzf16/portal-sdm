@@ -146,7 +146,7 @@ const MyProfile: React.FC = () => {
                     <div>
                         <h3 className="text-2xl font-bold text-gray-800">{user.name}</h3>
                         <p className="text-md text-gray-600">{employee.position}</p>
-                        <p className="text-sm text-gray-500">{employee.department} - {employee.grade}</p>
+                        <p className="text-sm text-gray-500">{employee.department} - {employee.pangkat} ({employee.golongan})</p>
                         <span className={`mt-2 inline-block px-3 py-1 rounded-full text-sm font-semibold ${employee.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {employee.isActive ? 'Aktif' : 'Nonaktif'}
                         </span>

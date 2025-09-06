@@ -41,7 +41,8 @@ Menyimpan data detail dan komprehensif untuk setiap karyawan. Ini adalah tabel p
 | id                     | string (PK)       | ID unik untuk setiap karyawan, cth: 'emp-001'.                   |
 | nip                    | string (unique)   | Nomor Induk Pegawai.                                             |
 | position               | string            | Jabatan karyawan, cth: 'Pengembang Frontend'.                    |
-| grade                  | string            | Golongan atau tingkatan karyawan, cth: 'Staf Senior (3A)'.       |
+| pangkat                | string            | Nama pangkat atau tingkatan karyawan, cth: 'Penata Muda'.        |
+| golongan               | string            | Kode golongan ruang, cth: 'III/a'.                               |
 | department             | string            | Departemen tempat karyawan bekerja, cth: 'Teknologi'.            |
 | joinDate               | string (date)     | Tanggal karyawan mulai bergabung (YYYY-MM-DD).                   |
 | avatarUrl              | string            | URL ke foto profil karyawan.                                     |

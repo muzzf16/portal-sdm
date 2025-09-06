@@ -1,7 +1,7 @@
 import React, { useState, useMemo, Fragment, useContext } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Layout } from '../components/Layout';
-import { ADMIN_NAV_LINKS, ICONS, attendanceData } from '../constants';
+import { ADMIN_NAV_LINKS, ICONS, attendanceData, GOLONGAN_OPTIONS } from '../constants';
 import { Card, StatCard, Modal, Button, Input, Select, PageTitle, Textarea } from '../components/ui';
 import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus } from '../types';
 import { DataContext } from '../context/DataContext';
@@ -226,7 +226,8 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         joinDate: employee?.joinDate || '',
         leaveBalance: employee?.leaveBalance ?? 12,
         avatarUrl: employee?.avatarUrl || 'https://picsum.photos/200',
-        grade: employee?.grade || '',
+        pangkat: employee?.pangkat || '',
+        golongan: employee?.golongan || 'III/a',
         address: employee?.address || '',
         pob: employee?.pob || '',
         dob: employee?.dob || '',
@@ -284,10 +285,13 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
                         <Input label="Email" name="email" type="email" value={formData.email} onChange={handleChange} required />
                         <Input label="NIP" name="nip" value={formData.nip} onChange={handleChange} required />
                         <Input label="Posisi" name="position" value={formData.position} onChange={handleChange} required />
-                        <Input label="Golongan" name="grade" value={formData.grade} onChange={handleChange} required />
+                        <Input label="Pangkat" name="pangkat" value={formData.pangkat} onChange={handleChange} required />
+                        <Select label="Golongan" name="golongan" value={formData.golongan} onChange={handleChange}>
+                            {GOLONGAN_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                        </Select>
                         <Input label="Departemen" name="department" value={formData.department} onChange={handleChange} required />
                         <Input label="Tanggal Bergabung" name="joinDate" type="date" value={formData.joinDate} onChange={handleChange} required />
-                        <div className="flex items-center mt-6">
+                        <div className="flex items-center mt-6 md:col-span-2">
                             <input type="checkbox" id="isActive" name="isActive" checked={formData.isActive} onChange={handleChange} className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500" />
                             <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">Karyawan Aktif</label>
                         </div>
@@ -380,7 +384,7 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
                     <div>
                         <h3 className="text-2xl font-bold text-gray-800">{user.name}</h3>
                         <p className="text-md text-gray-600">{employee.position}</p>
-                        <p className="text-sm text-gray-500">{employee.department} - {employee.grade}</p>
+                        <p className="text-sm text-gray-500">{employee.department} - {employee.pangkat} ({employee.golongan})</p>
                         <span className={`mt-2 inline-block px-3 py-1 rounded-full text-sm font-semibold ${employee.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {employee.isActive ? 'Aktif' : 'Nonaktif'}
                         </span>

@@ -76,7 +76,8 @@ export interface Employee {
   id: string;
   nip: string;
   position: string;
-  grade: string;
+  pangkat: string;
+  golongan: string;
   department: string;
   joinDate: string;
   avatarUrl: string;
