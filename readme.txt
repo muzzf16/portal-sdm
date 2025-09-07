@@ -4,9 +4,9 @@ SISTEM MANAJEMEN SDM - PETUNJUK INSTALASI LOKAL
 
 PENDAHULUAN
 -----------
-Dokumen ini berisi panduan untuk melakukan instalasi dan menjalankan aplikasi Sistem Manajemen SDM di komputer lokal Anda. Aplikasi ini adalah aplikasi full-stack dengan frontend React dan backend Node.js (Express) yang menyajikan data dari file `db.json`.
+Dokumen ini berisi panduan untuk melakukan instalasi dan menjalankan aplikasi Sistem Manajemen SDM di komputer lokal Anda. Aplikasi ini adalah aplikasi full-stack dengan frontend React dan backend Node.js (Express) yang sekarang menggunakan database SQLite untuk persistensi data.
 
-Perubahan Kunci: Aplikasi ini sekarang memiliki backend nyata yang menangani semua logika data. Perubahan yang Anda buat di aplikasi (misalnya, menambah karyawan) akan disimpan secara permanen di file `db.json`, bahkan setelah server di-restart.
+Perubahan Kunci: Aplikasi ini telah dimigrasi dari database file-JSON (`db.json`) ke database SQL (`database.sqlite`). Ini memberikan penyimpanan data yang lebih kuat, aman, dan andal. Perubahan yang Anda buat di aplikasi (misalnya, menambah karyawan) akan disimpan secara permanen di file database ini.
 
 PRASYARAT
 ---------
@@ -32,24 +32,24 @@ proyek-sdm/
 │   ├── Register.tsx
 │   └── ForgotPassword.tsx
 ├── services/
-│   └── api.ts              <-- (BARU: Layanan API Frontend)
+│   └── api.ts
 ├── App.tsx
 ├── constants.tsx
 ├── database_schema.txt
-├── db.json               <-- (BARU: Database File-JSON)
+├── db.json               <-- (HANYA UNTUK DATA AWAL/SEED)
 ├── index.html
 ├── index.tsx
 ├── metadata.json
 ├── package.json
 ├── readme.txt
-├── server.js             <-- (DIPERBARUI: Backend Server)
+├── server.js             <-- (DIPERBARUI: Backend Server dengan SQLite)
 └── types.ts
+
+*CATATAN: File `database.sqlite` akan dibuat secara otomatis saat Anda menjalankan server untuk pertama kalinya.*
 
 STRUKTUR DATA (SKEMA DATABASE)
 -----------------------------
-Aplikasi ini menggunakan model data yang didefinisikan dalam file `db.json` untuk berfungsi sebagai database. Untuk pemahaman mendalam tentang struktur data, silakan merujuk ke file:
-
-`database_schema.txt`
+Aplikasi ini menggunakan skema database SQL yang didefinisikan dalam `server.js` dan didokumentasikan dalam file `database_schema.txt`.
 
 LANGKAH-LANGKAH INSTALASI
 -------------------------
@@ -60,31 +60,37 @@ LANGKAH-LANGKAH INSTALASI
 
 MENJALANKAN APLIKASI
 --------------------
-Aplikasi ini sekarang dijalankan menggunakan server Node.js. Ikuti langkah-langkah berikut:
+Aplikasi ini sekarang dijalankan menggunakan server Node.js dengan database SQLite. Ikuti langkah-langkah berikut:
 
 1. Buka Terminal atau Command Prompt.
 
 2. Arahkan direktori ke folder utama proyek Anda.
    Contoh: `cd path/ke/folder/proyek-sdm`
 
-3. Instal dependensi yang diperlukan. Perintah ini akan membaca file `package.json` dan mengunduh library yang dibutuhkan (seperti Express.js).
+3. Instal dependensi yang diperlukan. Perintah ini akan membaca file `package.json` dan mengunduh library yang dibutuhkan (Express.js dan driver SQLite).
    `npm install`
 
 4. Setelah instalasi selesai, jalankan server backend.
    `npm start`
 
-5. Anda akan melihat pesan di terminal yang menandakan server sudah berjalan, contohnya:
+5. Anda akan melihat pesan di terminal yang menandakan server sudah berjalan dan terhubung ke database SQLite, contohnya:
    `Server Sistem Manajemen SDM berjalan di http://localhost:3000`
-   `Database file is at: /path/ke/folder/proyek-sdm/db.json`
+   `Connected to the SQLite database.`
+   `Database file is at: /path/ke/folder/proyek-sdm/database.sqlite`
+
+   Pada saat pertama kali dijalankan, server akan secara otomatis:
+   a. Membuat file `database.sqlite`.
+   b. Membuat semua tabel yang diperlukan.
+   c. Mengisi tabel-tabel tersebut dengan data awal dari `db.json`.
 
 6. Buka web browser Anda dan kunjungi alamat berikut:
    `http://localhost:3000`
 
-Aplikasi Sistem Manajemen SDM sekarang seharusnya sudah berjalan. Semua data diambil dari dan disimpan ke backend Node.js.
+Aplikasi Sistem Manajemen SDM sekarang seharusnya sudah berjalan. Semua data diambil dari dan disimpan ke database SQLite secara permanen.
 
 CARA PENGGUNAAN
 ---------------
 1. Setelah aplikasi terbuka, Anda akan disambut oleh Landing Page.
 2. Klik tombol "Masuk" untuk pergi ke halaman login.
 3. Di halaman login, Anda dapat memilih untuk masuk sebagai "Admin (SDM)" atau "Karyawan".
-4. Semua data yang Anda ubah (menambah karyawan, menyetujui cuti, dll.) sekarang akan dikirim ke server dan disimpan secara permanen di file `db.json`.
+4. Semua data yang Anda ubah (menambah karyawan, menyetujui cuti, dll.) sekarang akan dikirim ke server dan disimpan secara permanen di file `database.sqlite`.

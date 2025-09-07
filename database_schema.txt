@@ -1,19 +1,17 @@
 ================================================
-SKEMA DATABASE - SISTEM MANAJEMEN SDM (v2.0)
+SKEMA DATABASE - SISTEM MANAJEMEN SDM (v3.0 - SQL)
 ================================================
 
 PENJELASAN
 ----------
-Dokumen ini merinci skema "database" yang digunakan oleh aplikasi. Karena aplikasi ini
-bersifat frontend-only, "database" ini disimulasikan menggunakan data tiruan (mock data)
-yang disimpan di localStorage browser. Struktur ini mencerminkan bagaimana data akan
-diorganisir dalam sistem database relasional nyata.
+Dokumen ini merinci skema database SQL (SQLite) yang digunakan oleh aplikasi.
+Struktur ini lebih formal dan kuat dibandingkan dengan versi berbasis file-JSON sebelumnya.
 
-- Tipe Data: Menjelaskan jenis data yang disimpan (string, number, boolean, enum, json).
-- Relasi: Menunjukkan hubungan antar tabel, misalnya Foreign Key (FK).
-- Denormalisasi: Beberapa data (seperti `employeeName`) sengaja diduplikasi di tabel lain
-  untuk menyederhanakan pengambilan data di frontend, sebuah praktik umum untuk
-  mengoptimalkan query baca.
+- Tipe Data: Menggunakan tipe data afinitas SQLite (TEXT, INTEGER, REAL).
+- Kunci: Menandai Primary Key (PK) untuk setiap tabel.
+- Penyimpanan JSON: Kolom yang menyimpan data terstruktur kompleks (seperti riwayat pekerjaan)
+  menggunakan tipe data `TEXT` untuk menyimpan string JSON. Proses serialisasi (stringify)
+  dan deserialisasi (parse) ditangani di backend (`server.js`).
 
 ---
 
@@ -22,44 +20,40 @@ Menyimpan data akun pengguna untuk login, otentikasi, dan manajemen akses.
 
 | Nama Kolom          | Tipe Data         | Deskripsi                                                        |
 |---------------------|-------------------|------------------------------------------------------------------|
-| id                  | string (PK)       | ID unik untuk setiap pengguna, cth: 'user-001'.                  |
-| name                | string            | Nama lengkap pengguna.                                           |
-| email               | string (unique)   | Alamat email unik untuk login.                                   |
-| passwordHash        | string            | Hash kata sandi. (Konseptual untuk skema ini, tidak disimpan).    |
-| role                | enum              | Peran pengguna: 'ADMIN' atau 'EMPLOYEE'.                         |
-| employeeId          | string (FK)       | Merujuk ke `employees.id`. Tautan ke profil karyawan terkait.    |
-|                     |                   | *Catatan Implementasi: Dalam mock data, `employeeDetails` (objek) |
-|                     |                   |  digunakan sebagai ganti `employeeId` untuk kemudahan.            |
+| id                  | TEXT PRIMARY KEY  | ID unik untuk setiap pengguna, cth: 'user-001'.                  |
+| name                | TEXT              | Nama lengkap pengguna.                                           |
+| email               | TEXT UNIQUE       | Alamat email unik untuk login.                                   |
+| role                | TEXT              | Peran pengguna: 'ADMIN' atau 'EMPLOYEE'.                         |
+| employeeId          | TEXT              | Foreign Key yang merujuk ke `employees.id`.                      |
 
 ---
 
 ### 2. Tabel: `employees`
-Menyimpan data detail dan komprehensif untuk setiap karyawan. Ini adalah tabel pusat data SDM.
+Menyimpan data detail dan komprehensif untuk setiap karyawan.
 
 | Nama Kolom             | Tipe Data         | Deskripsi                                                        |
 |------------------------|-------------------|------------------------------------------------------------------|
-| id                     | string (PK)       | ID unik untuk setiap karyawan, cth: 'emp-001'.                   |
-| nip                    | string (unique)   | Nomor Induk Pegawai.                                             |
-| position               | string            | Jabatan karyawan, cth: 'Pengembang Frontend'.                    |
-| pangkat                | string            | Nama pangkat atau tingkatan karyawan, cth: 'Penata Muda'.        |
-| golongan               | string            | Kode golongan ruang, cth: 'III/a'.                               |
-| department             | string            | Departemen tempat karyawan bekerja, cth: 'Teknologi'.            |
-| joinDate               | string (date)     | Tanggal karyawan mulai bergabung (YYYY-MM-DD).                   |
-| avatarUrl              | string            | URL ke foto profil karyawan.                                     |
-| leaveBalance           | number            | Sisa kuota cuti tahunan (dalam hari).                            |
-| isActive               | boolean           | Status keaktifan karyawan (true = aktif, false = nonaktif).      |
-| address                | string            | Alamat tempat tinggal.                                           |
-| phone                  | string            | Nomor telepon aktif.                                             |
-| pob                    | string            | Tempat lahir.                                                    |
-| dob                    | string (date)     | Tanggal lahir (YYYY-MM-DD).                                      |
-| religion               | string            | Agama yang dianut.                                               |
-| maritalStatus          | enum              | 'Lajang', 'Menikah', 'Bercerai', 'Janda/Duda'.                   |
-| numberOfChildren       | number            | Jumlah anak.                                                     |
-| emergencyContact       | json (object)     | Kontak darurat. `{ name: string, relation: string, phone: string }` |
-| educationHistory       | json (array)      | Riwayat pendidikan. `[{level, institution, major, gradYear}]`    |
-| workHistory            | json (array)      | Riwayat pekerjaan. `[{company, position, startDate, endDate}]`   |
-| trainingCertificates   | json (array)      | Sertifikat pelatihan. `[{name, issuer, issueDate}]`              |
-| payrollInfo            | json (object)     | Pengaturan penggajian. `{baseSalary, incomes, deductions}`       |
+| id                     | TEXT PRIMARY KEY  | ID unik untuk setiap karyawan, cth: 'emp-001'.                   |
+| nip                    | TEXT UNIQUE       | Nomor Induk Pegawai.                                             |
+| position               | TEXT              | Jabatan karyawan, cth: 'Pengembang Frontend'.                    |
+| pangkat                | TEXT              | Nama pangkat atau tingkatan karyawan.                            |
+| golongan               | TEXT              | Kode golongan ruang, cth: 'III/a'.                               |
+| department             | TEXT              | Departemen tempat karyawan bekerja.                              |
+| joinDate               | TEXT              | Tanggal karyawan mulai bergabung (YYYY-MM-DD).                   |
+| avatarUrl              | TEXT              | URL ke foto profil karyawan.                                     |
+| leaveBalance           | INTEGER           | Sisa kuota cuti tahunan (dalam hari).                            |
+| isActive               | INTEGER           | Status keaktifan (1 = aktif, 0 = nonaktif).                      |
+| address                | TEXT              | Alamat tempat tinggal.                                           |
+| phone                  | TEXT              | Nomor telepon aktif.                                             |
+| pob                    | TEXT              | Tempat lahir.                                                    |
+| dob                    | TEXT              | Tanggal lahir (YYYY-MM-DD).                                      |
+| religion               | TEXT              | Agama yang dianut.                                               |
+| maritalStatus          | TEXT              | 'Lajang', 'Menikah', 'Bercerai', 'Janda/Duda'.                   |
+| numberOfChildren       | INTEGER           | Jumlah anak.                                                     |
+| educationHistory       | TEXT              | String JSON dari array objek riwayat pendidikan.                 |
+| workHistory            | TEXT              | String JSON dari array objek riwayat pekerjaan.                  |
+| trainingCertificates   | TEXT              | String JSON dari array objek sertifikat.                         |
+| payrollInfo            | TEXT              | String JSON dari objek pengaturan penggajian.                    |
 
 ---
 
@@ -68,19 +62,16 @@ Mencatat semua pengajuan cuti atau izin dari karyawan.
 
 | Nama Kolom             | Tipe Data         | Deskripsi                                                        |
 |------------------------|-------------------|------------------------------------------------------------------|
-| id                     | string (PK)       | ID unik untuk setiap pengajuan, cth: 'leave-001'.                |
-| employeeId             | string (FK)       | Merujuk ke `employees.id` yang mengajukan.                       |
-| employeeName           | string            | Nama karyawan (denormalisasi).                                   |
-| leaveType              | enum              | 'Cuti Tahunan', 'Cuti Sakit', 'Izin Khusus'.                     |
-| requestDate            | string (date)     | Tanggal pengajuan dibuat (YYYY-MM-DD).                           |
-| startDate              | string (date)     | Tanggal mulai cuti (YYYY-MM-DD).                                 |
-| endDate                | string (date)     | Tanggal selesai cuti (YYYY-MM-DD).                               |
-| reason                 | string            | Alasan pengajuan cuti.                                           |
-| status                 | enum              | 'Menunggu', 'Disetujui', 'Ditolak'.                              |
-| supportingDocument     | string (optional) | Nama file atau path ke dokumen pendukung.                        |
-| approverId             | string (FK, opt)  | Merujuk ke `users.id` yang memproses (menyetujui/menolak).       |
-| approvalDate           | string (date, opt)| Tanggal pengajuan diproses.                                      |
-| rejectionReason        | string (optional) | Alasan jika pengajuan ditolak.                                   |
+| id                     | TEXT PRIMARY KEY  | ID unik untuk setiap pengajuan.                                  |
+| employeeId             | TEXT              | Foreign Key ke `employees.id`.                                   |
+| employeeName           | TEXT              | Nama karyawan (denormalisasi).                                   |
+| leaveType              | TEXT              | 'Cuti Tahunan', 'Cuti Sakit', 'Izin Khusus'.                     |
+| startDate              | TEXT              | Tanggal mulai cuti (YYYY-MM-DD).                                 |
+| endDate                | TEXT              | Tanggal selesai cuti (YYYY-MM-DD).                               |
+| reason                 | TEXT              | Alasan pengajuan cuti.                                           |
+| status                 | TEXT              | 'Menunggu', 'Disetujui', 'Ditolak'.                              |
+| supportingDocument     | TEXT              | Nama file atau path ke dokumen pendukung.                        |
+| rejectionReason        | TEXT              | Alasan jika pengajuan ditolak.                                   |
 
 ---
 
@@ -89,18 +80,16 @@ Menyimpan riwayat slip gaji yang telah dibuat untuk setiap karyawan per periode.
 
 | Nama Kolom             | Tipe Data         | Deskripsi                                                        |
 |------------------------|-------------------|------------------------------------------------------------------|
-| id                     | string (PK)       | ID unik untuk setiap slip gaji, cth: 'pay-001'.                  |
-| employeeId             | string (FK)       | Merujuk ke `employees.id`.                                       |
-| employeeName           | string            | Nama karyawan (denormalisasi).                                   |
-| period                 | string            | Periode penggajian, cth: 'Juni 2024'.                            |
-| payDate                | string (date)     | Tanggal gaji dibayarkan.                                         |
-| status                 | enum              | Status pembayaran: 'Dibuat', 'Dibayar', 'Dibatalkan'.            |
-| baseSalary             | number            | Gaji pokok pada periode tersebut.                                |
-| incomes                | json (array)      | Komponen pendapatan. `[{id, name, amount}]`                      |
-| deductions             | json (array)      | Komponen potongan. `[{id, name, amount}]`                        |
-| totalIncome            | number            | Jumlah total pendapatan (gaji pokok + semua `incomes`).          |
-| totalDeductions        | number            | Jumlah total semua `deductions`.                                 |
-| netSalary              | number            | Gaji bersih (totalIncome - totalDeductions).                     |
+| id                     | TEXT PRIMARY KEY  | ID unik untuk setiap slip gaji.                                  |
+| employeeId             | TEXT              | Foreign Key ke `employees.id`.                                   |
+| employeeName           | TEXT              | Nama karyawan (denormalisasi).                                   |
+| period                 | TEXT              | Periode penggajian, cth: 'Juni 2024'.                            |
+| baseSalary             | REAL              | Gaji pokok pada periode tersebut.                                |
+| incomes                | TEXT              | String JSON dari array komponen pendapatan.                      |
+| deductions             | TEXT              | String JSON dari array komponen potongan.                        |
+| totalIncome            | REAL              | Jumlah total pendapatan.                                         |
+| totalDeductions        | REAL              | Jumlah total semua potongan.                                     |
+| netSalary              | REAL              | Gaji bersih (take home pay).                                     |
 
 ---
 
@@ -109,34 +98,31 @@ Menyimpan data hasil penilaian kinerja karyawan.
 
 | Nama Kolom             | Tipe Data         | Deskripsi                                                        |
 |------------------------|-------------------|------------------------------------------------------------------|
-| id                     | string (PK)       | ID unik untuk setiap penilaian, cth: 'pr-001'.                   |
-| employeeId             | string (FK)       | Merujuk ke `employees.id` yang dinilai.                          |
-| employeeName           | string            | Nama karyawan (denormalisasi).                                   |
-| period                 | string            | Periode penilaian, cth: 'Q2 2024'.                               |
-| reviewerId             | string (FK)       | Merujuk ke `users.id` penilai (admin/manajer).                   |
-| reviewerName           | string            | Nama penilai (denormalisasi).                                    |
-| reviewDate             | string (date)     | Tanggal penilaian dilakukan (YYYY-MM-DD).                        |
-| overallScore           | number            | Skor akhir keseluruhan dari penilaian (misal: skala 1-5).        |
-| status                 | enum              | 'Completed', 'In Progress'.                                      |
-| strengths              | string (text)     | Umpan balik kualitatif mengenai kekuatan karyawan.               |
-| areasForImprovement    | string (text)     | Umpan balik mengenai area yang perlu ditingkatkan.               |
-| employeeFeedback       | string (optional) | Tanggapan dari karyawan terkait hasil penilaian.                 |
-| kpis                   | json (array)      | Rincian KPI. `[{id, metric, target, result, weight, score, notes}]` |
+| id                     | TEXT PRIMARY KEY  | ID unik untuk setiap penilaian.                                  |
+| employeeId             | TEXT              | Foreign Key ke `employees.id`.                                   |
+| employeeName           | TEXT              | Nama karyawan (denormalisasi).                                   |
+| period                 | TEXT              | Periode penilaian, cth: 'Q2 2024'.                               |
+| reviewerName           | TEXT              | Nama penilai (denormalisasi).                                    |
+| reviewDate             | TEXT              | Tanggal penilaian (YYYY-MM-DD).                                  |
+| overallScore           | REAL              | Skor akhir keseluruhan dari penilaian.                           |
+| status                 | TEXT              | 'Completed', 'In Progress'.                                      |
+| strengths              | TEXT              | Umpan balik kualitatif mengenai kekuatan karyawan.               |
+| areasForImprovement    | TEXT              | Umpan balik mengenai area yang perlu ditingkatkan.               |
+| employeeFeedback       | TEXT              | Tanggapan dari karyawan terkait hasil penilaian.                 |
+| kpis                   | TEXT              | String JSON dari array rincian KPI.                              |
 
 ---
 
-### 6. Tabel: `attendanceRecords`
+### 6. Tabel: `attendance`
 Mencatat data kehadiran harian setiap karyawan.
 
 | Nama Kolom             | Tipe Data         | Deskripsi                                                        |
 |------------------------|-------------------|------------------------------------------------------------------|
-| id                     | string (PK)       | ID unik, cth: 'att-001'.                                         |
-| employeeId             | string (FK)       | Merujuk ke `employees.id`.                                       |
-| employeeName           | string            | Nama karyawan (denormalisasi).                                   |
-| date                   | string (date)     | Tanggal absensi (YYYY-MM-DD).                                    |
-| clockIn                | string (time/null)| Waktu masuk (HH:mm:ss).                                          |
-| clockOut               | string (time/null)| Waktu keluar (HH:mm:ss).                                         |
-| status                 | enum              | 'Tepat Waktu', 'Terlambat', 'Absen'.                             |
-|                        |                   | *Catatan: Status 'Absen' berarti `clockIn` & `clockOut` adalah null.* |
-| workDuration           | string (optional) | Total durasi kerja pada hari itu, cth: '8j 15m'.                 |
-| notes                  | string (optional) | Catatan tambahan (cth: izin pulang cepat, kerja remote).         |
+| id                     | TEXT PRIMARY KEY  | ID unik.                                                         |
+| employeeId             | TEXT              | Foreign Key ke `employees.id`.                                   |
+| employeeName           | TEXT              | Nama karyawan (denormalisasi).                                   |
+| date                   | TEXT              | Tanggal absensi (YYYY-MM-DD).                                    |
+| clockIn                | TEXT              | Waktu masuk (HH:mm:ss).                                          |
+| clockOut               | TEXT              | Waktu keluar (HH:mm:ss).                                         |
+| status                 | TEXT              | 'Tepat Waktu', 'Terlambat', 'Absen'.                             |
+| workDuration           | TEXT              | Total durasi kerja, cth: '8j 15m'.                               |
