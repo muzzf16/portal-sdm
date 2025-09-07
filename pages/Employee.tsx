@@ -6,7 +6,8 @@ import { Card, StatCard, PageTitle, Button, Modal, Select, Input, Textarea } fro
 import { AuthContext } from '../App';
 import { LeaveRequest, LeaveStatus, LeaveType, Payroll, PerformanceReview, AttendanceRecord, AttendanceStatus } from '../types';
 import { DataContext } from '../context/DataContext';
-import { useApi } from '../hooks/useApi';
+import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const NewPayslipAlert: React.FC<{ payslipPeriod: string; onViewClick: () => void }> = ({ payslipPeriod, onViewClick }) => {
     const [isVisible, setIsVisible] = useState(true);
@@ -39,6 +40,9 @@ const NewPayslipAlert: React.FC<{ payslipPeriod: string; onViewClick: () => void
 const EmployeeDashboard: React.FC<{ latestNewPayslip: Payroll | null, setActiveView: (view: string) => void }> = ({ latestNewPayslip, setActiveView }) => {
     const { user } = useContext(AuthContext);
     const { db } = useContext(DataContext);
+    
+    if (!db || !user) return null;
+
     const myRequests = db.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
     const latestRequest = myRequests.length > 0 ? myRequests.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())[0] : null;
     
@@ -117,21 +121,23 @@ const DetailItem: React.FC<{ label: string; value: string | number | undefined }
 
 const MyProfile: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const { simulateApiCall } = useApi();
+    const { addToast } = useToast();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [requestMessage, setRequestMessage] = useState('');
-    const [isNotificationVisible, setIsNotificationVisible] = useState(false);
 
     if (!user || !user.employeeDetails) return <p>Memuat profil...</p>;
     
     const employee = user.employeeDetails;
     
-    const handleRequestSubmit = () => {
-        simulateApiCall(async () => {
-            console.log("Request for data change:", requestMessage);
+    const handleRequestSubmit = async () => {
+        try {
+            await api.submitDataChangeRequest(requestMessage);
+            addToast("Permintaan berhasil dikirim ke HR.", 'success');
             setIsModalOpen(false);
             setRequestMessage('');
-        }, "Mengirim permintaan perubahan data...", "Permintaan berhasil dikirim ke HR.");
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Gagal mengirim permintaan.", 'error');
+        }
     };
 
     return (
@@ -218,65 +224,42 @@ const MyProfile: React.FC = () => {
 
 const MyAttendance: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const { db, updateDb } = useContext(DataContext);
-    const { simulateApiCall } = useApi();
+    const { db, refreshData } = useContext(DataContext);
+    const { addToast } = useToast();
     const today = new Date().toISOString().split('T')[0];
     const [currentTime, setCurrentTime] = useState(new Date());
 
-    const myAttendanceHistory = db.attendance.filter(a => a.employeeId === user?.employeeDetails?.id);
+    const myAttendanceHistory = db!.attendance.filter(a => a.employeeId === user?.employeeDetails?.id);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // Simulating today's record for demo purposes
-    const demoToday = '2024-07-30';
-    const todaysRecord = myAttendanceHistory.find(a => a.date === demoToday);
+    const todaysRecord = myAttendanceHistory.find(a => a.date === today);
     
-    const handleClockIn = () => {
+    const handleClockIn = async () => {
         if (!user || !user.employeeDetails || todaysRecord) return;
         
-        simulateApiCall(async () => {
-            const now = new Date();
-            const clockInTime = now.toLocaleTimeString('en-GB');
-            const isLate = clockInTime > COMPANY_WORK_START_TIME;
-            
-            const newRecord: AttendanceRecord = {
-                id: `att-${Date.now()}`,
-                employeeId: user.employeeDetails.id,
-                employeeName: user.name,
-                date: today,
-                clockIn: clockInTime,
-                clockOut: null,
-                status: isLate ? AttendanceStatus.LATE : AttendanceStatus.ON_TIME
-            };
-            updateDb({ ...db, attendance: [newRecord, ...db.attendance] });
-        }, "Melakukan Clock In...", `Clock In berhasil pada ${new Date().toLocaleTimeString('en-GB')}`);
+        try {
+            await api.clockIn(user.employeeDetails.id, user.name);
+            addToast(`Clock In berhasil pada ${new Date().toLocaleTimeString('en-GB')}`, 'success');
+            await refreshData();
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Gagal melakukan Clock In", 'error');
+        }
     };
 
-    const calculateDuration = (start: string, end: string): string => {
-        const startTime = new Date(`${today}T${start}`);
-        const endTime = new Date(`${today}T${end}`);
-        const diffMs = endTime.getTime() - startTime.getTime();
-        const diffHrs = Math.floor(diffMs / 3600000);
-        const diffMins = Math.floor((diffMs % 3600000) / 60000);
-        return `${diffHrs}j ${diffMins}m`;
-    };
+    const handleClockOut = async () => {
+        if (!todaysRecord || !user.employeeDetails) return;
 
-    const handleClockOut = () => {
-        if (!todaysRecord) return;
-
-        simulateApiCall(async () => {
-            const clockOutTime = new Date().toLocaleTimeString('en-GB');
-            const updatedRecord: AttendanceRecord = {
-                ...todaysRecord,
-                clockOut: clockOutTime,
-                workDuration: todaysRecord.clockIn ? calculateDuration(todaysRecord.clockIn, clockOutTime) : undefined
-            };
-            const newAttendance = db.attendance.map(a => a.id === todaysRecord.id ? updatedRecord : a);
-            updateDb({ ...db, attendance: newAttendance });
-        }, "Melakukan Clock Out...", `Clock Out berhasil pada ${new Date().toLocaleTimeString('en-GB')}`);
+        try {
+            await api.clockOut(user.employeeDetails.id);
+            addToast(`Clock Out berhasil pada ${new Date().toLocaleTimeString('en-GB')}`, 'success');
+            await refreshData();
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Gagal melakukan Clock Out", 'error');
+        }
     };
 
     const getStatusChip = (record: AttendanceRecord | undefined) => {
@@ -380,26 +363,28 @@ const MyAttendance: React.FC = () => {
 
 const MyLeave: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const { db, updateDb } = useContext(DataContext);
-    const { simulateApiCall } = useApi();
-    const myRequests = db.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
+    const { db, refreshData } = useContext(DataContext);
+    const { addToast } = useToast();
+    const myRequests = db!.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const handleApplyLeave = (newRequest: Omit<LeaveRequest, 'id' | 'employeeId' | 'employeeName' | 'status'>) => {
+    const handleApplyLeave = async (newRequestData: Omit<LeaveRequest, 'id' | 'employeeId' | 'employeeName' | 'status'>) => {
         if(!user || !user.employeeDetails) return;
         
-        simulateApiCall(async () => {
-            const request: LeaveRequest = {
-                id: `leave-${Date.now()}`,
+        try {
+            const request = {
                 employeeId: user.employeeDetails.id,
                 employeeName: user.name,
-                status: LeaveStatus.PENDING,
-                ...newRequest
+                ...newRequestData
             };
-            updateDb({ ...db, leaveRequests: [request, ...db.leaveRequests] });
+            await api.submitLeaveRequest(request);
+            addToast("Pengajuan cuti berhasil dikirim.", 'success');
+            await refreshData();
             setIsModalOpen(false);
-        }, "Mengirim pengajuan cuti...");
+        } catch(error) {
+            addToast(error instanceof Error ? error.message : "Gagal mengirim pengajuan.", 'error');
+        }
     };
     
     const statusColor = (status: LeaveStatus) => {
@@ -591,18 +576,21 @@ const PerformanceReviewDetailModal: React.FC<{ review: PerformanceReview; onSave
 
 const MyPerformance: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const { db, updateDb } = useContext(DataContext);
-    const { simulateApiCall } = useApi();
-    const myReviews = db.performanceReviews.filter(r => r.employeeId === user?.employeeDetails?.id);
+    const { db, refreshData } = useContext(DataContext);
+    const { addToast } = useToast();
+    const myReviews = db!.performanceReviews.filter(r => r.employeeId === user?.employeeDetails?.id);
 
     const [selectedReview, setSelectedReview] = useState<PerformanceReview | null>(null);
 
-    const handleSaveFeedback = (reviewId: string, feedback: string) => {
-        simulateApiCall(async () => {
-            const newReviews = db.performanceReviews.map(r => r.id === reviewId ? { ...r, employeeFeedback: feedback } : r);
-            updateDb({ ...db, performanceReviews: newReviews });
+    const handleSaveFeedback = async (reviewId: string, feedback: string) => {
+        try {
+            await api.submitPerformanceFeedback(reviewId, feedback);
+            addToast("Tanggapan Anda berhasil dikirim.", 'success');
+            await refreshData();
             setSelectedReview(null); // Close modal on save
-        }, "Mengirim tanggapan Anda...");
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Gagal mengirim tanggapan.", 'error');
+        }
     };
     
     return (
@@ -715,7 +703,7 @@ const MyPayslips: React.FC<{ onMount: () => void }> = ({ onMount }) => {
 
     const { user } = useContext(AuthContext);
     const { db } = useContext(DataContext);
-    const myPayslips = db.payrolls.filter(p => p.employeeId === user?.employeeDetails?.id);
+    const myPayslips = db!.payrolls.filter(p => p.employeeId === user?.employeeDetails?.id);
     const [selectedPayslip, setSelectedPayslip] = useState<Payroll | null>(null);
 
     return (
@@ -750,7 +738,7 @@ export const EmployeePage: React.FC = () => {
     const VIEWED_PAYSLIPS_KEY = useMemo(() => `hrms_viewed_payslips_${user?.id}`, [user?.id]);
 
     useEffect(() => {
-        if (!user?.employeeDetails || !VIEWED_PAYSLIPS_KEY) return;
+        if (!user?.employeeDetails || !VIEWED_PAYSLIPS_KEY || !db) return;
         
         const getFromStorage = <T,>(key: string, defaultValue: T): T => {
             try {
@@ -769,10 +757,10 @@ export const EmployeePage: React.FC = () => {
             .sort((a, b) => b.id.localeCompare(a.id));
 
         setNewPayslips(unreadPayslips);
-    }, [db.payrolls, user?.employeeDetails, VIEWED_PAYSLIPS_KEY]);
+    }, [db, user?.employeeDetails, VIEWED_PAYSLIPS_KEY]);
 
     const markPayslipsAsViewed = useCallback(() => {
-        if (!user?.employeeDetails || newPayslips.length === 0) return;
+        if (!user?.employeeDetails || newPayslips.length === 0 || !db) return;
 
         const myCurrentPayslipIds = db.payrolls
             .filter(p => p.employeeId === user.employeeDetails.id)
@@ -780,7 +768,7 @@ export const EmployeePage: React.FC = () => {
         
         localStorage.setItem(VIEWED_PAYSLIPS_KEY, JSON.stringify(myCurrentPayslipIds));
         setNewPayslips([]);
-    }, [db.payrolls, user?.employeeDetails, VIEWED_PAYSLIPS_KEY, newPayslips.length]);
+    }, [db, user?.employeeDetails, VIEWED_PAYSLIPS_KEY, newPayslips.length]);
 
     const navLinksWithBadge = useMemo(() => {
         return EMPLOYEE_NAV_LINKS.map(link => {
@@ -790,6 +778,8 @@ export const EmployeePage: React.FC = () => {
             return link;
         });
     }, [newPayslips.length]);
+    
+    if (!db) return null; // or a loading spinner
 
     const latestNewPayslip = newPayslips.length > 0 ? newPayslips[0] : null;
 

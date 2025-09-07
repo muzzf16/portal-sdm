@@ -5,7 +5,8 @@ import { ADMIN_NAV_LINKS, ICONS, attendanceData, GOLONGAN_OPTIONS } from '../con
 import { Card, StatCard, Modal, Button, Input, Select, PageTitle, Textarea } from '../components/ui';
 import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus } from '../types';
 import { DataContext } from '../context/DataContext';
-import { useApi } from '../hooks/useApi';
+import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
     const [isVisible, setIsVisible] = useState(true);
@@ -37,6 +38,7 @@ const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }>
 
 const AdminDashboard: React.FC<{ pendingRequestsCount: number; setActiveView: (view: string) => void }> = ({ pendingRequestsCount, setActiveView }) => {
     const { db } = useContext(DataContext);
+    if (!db) return null;
     return (
     <div>
         <NewLeaveRequestAlert count={pendingRequestsCount} onViewClick={() => setActiveView('leaves')} />
@@ -66,9 +68,9 @@ const AdminDashboard: React.FC<{ pendingRequestsCount: number; setActiveView: (v
 )};
 
 const EmployeeManagement: React.FC = () => {
-    const { db, updateDb } = useContext(DataContext);
-    const { employees, users } = db;
-    const { simulateApiCall } = useApi();
+    const { db, refreshData } = useContext(DataContext);
+    const { addToast } = useToast();
+    const { employees, users } = db!;
     
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -79,6 +81,7 @@ const EmployeeManagement: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [positionFilter, setPositionFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [isLoading, setIsLoading] = useState(false);
 
     const openFormModal = (employee: Employee | null = null) => {
         if (employee) {
@@ -104,37 +107,23 @@ const EmployeeManagement: React.FC = () => {
         setSelectedEmployeeForDetails(null);
     };
     
-    const handleSave = (data: Partial<Employee> & { name: string; email: string }) => {
-        simulateApiCall(async () => {
-            const { name, email, ...employeeData } = data;
-            let newDb = { ...db };
-
-            if (employeeData.id) { // Edit existing employee
-                const updatedEmployee = employeeData as Employee;
-                newDb.employees = db.employees.map(e => e.id === updatedEmployee.id ? updatedEmployee : e);
-                newDb.users = db.users.map(u => u.employeeDetails?.id === updatedEmployee.id ? { ...u, name, email } : u);
-            } else { // Add new employee
-                const newId = `emp-${Date.now()}`;
-                const newEmployee: Employee = {
-                    ...(employeeData as Omit<Employee, 'id'>),
-                    id: newId,
-                    avatarUrl: 'https://picsum.photos/id/1/200', // Default avatar
-                    payrollInfo: { baseSalary: 0, incomes: [], deductions: [] }, // Default payroll
-                };
-                const newUser: User = {
-                    id: `user-${Date.now()}`,
-                    name,
-                    email,
-                    role: Role.EMPLOYEE,
-                    employeeDetails: newEmployee
-                };
-                newDb.employees = [...db.employees, newEmployee];
-                newDb.users = [...db.users, newUser];
+    const handleSave = async (data: Partial<Employee> & { name: string; email: string }) => {
+        setIsLoading(true);
+        try {
+            if (data.id) { // Edit
+                await api.updateEmployee(data.id, data);
+                addToast('Data karyawan berhasil diperbarui', 'success');
+            } else { // Add
+                await api.addEmployee(data);
+                addToast('Karyawan baru berhasil ditambahkan', 'success');
             }
-            updateDb(newDb);
+            await refreshData();
             closeFormModal();
-// FIX: Changed `employeeData.id` to `data.id` to fix variable scope issue. `employeeData` is not available here, but `data` is.
-        }, data.id ? 'Memperbarui data karyawan...' : 'Menambahkan karyawan baru...');
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Gagal menyimpan data', 'error');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
 
@@ -149,7 +138,7 @@ const EmployeeManagement: React.FC = () => {
         });
     }, [employees, users, searchTerm, positionFilter, statusFilter]);
     
-    const allPositions = useMemo(() => [...new Set(db.employees.map(e => e.position))], [db.employees]);
+    const allPositions = useMemo(() => [...new Set(db!.employees.map(e => e.position))], [db]);
 
     return (
         <div>
@@ -208,13 +197,13 @@ const EmployeeManagement: React.FC = () => {
                 </table>
                 </div>
             </Card>
-            {isFormModalOpen && <EmployeeFormModal employee={selectedEmployeeForForm} onSave={handleSave} onClose={closeFormModal} />}
+            {isFormModalOpen && <EmployeeFormModal employee={selectedEmployeeForForm} onSave={handleSave} onClose={closeFormModal} isLoading={isLoading} />}
             {isDetailsModalOpen && <EmployeeDetailsModal employee={selectedEmployeeForDetails?.employee} user={selectedEmployeeForDetails?.user} onClose={closeDetailsModal} />}
         </div>
     );
 };
 
-const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: string, email?: string }) | null, onSave: (data: Partial<Employee> & { name: string; email: string }) => void, onClose: () => void }> = ({ employee, onSave, onClose }) => {
+const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: string, email?: string }) | null, onSave: (data: Partial<Employee> & { name: string; email: string }) => void, onClose: () => void, isLoading: boolean }> = ({ employee, onSave, onClose, isLoading }) => {
     const [formData, setFormData] = useState({
         id: employee?.id || undefined,
         name: employee?.name || '',
@@ -347,7 +336,7 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
 
                 <div className="flex justify-end pt-4">
                     <Button type="button" variant="secondary" onClick={onClose} className="mr-2">Batal</Button>
-                    <Button type="submit">Simpan</Button>
+                    <Button type="submit" disabled={isLoading}>{isLoading ? 'Menyimpan...' : 'Simpan'}</Button>
                 </div>
             </form>
         </Modal>
@@ -444,22 +433,21 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
 
 
 const LeaveManagement: React.FC = () => {
-    const { db, updateDb } = useContext(DataContext);
-    const { leaveRequests } = db;
-    const { simulateApiCall } = useApi();
+    const { db, refreshData } = useContext(DataContext);
+    const { addToast } = useToast();
+    const { leaveRequests } = db!;
     
     const [rejectionModalState, setRejectionModalState] = useState<{ isOpen: boolean, requestId: string | null }>({ isOpen: false, requestId: null });
     const [rejectionReason, setRejectionReason] = useState('');
 
-    const updateLeaveStatus = (id: string, status: LeaveStatus, reason?: string) => {
-        simulateApiCall(async () => {
-            const newLeaveRequests = leaveRequests.map(req => 
-                req.id === id 
-                ? { ...req, status, rejectionReason: reason } 
-                : req
-            );
-            updateDb({ ...db, leaveRequests: newLeaveRequests });
-        }, `Memperbarui status cuti menjadi ${status}...`);
+    const updateLeaveStatus = async (id: string, status: LeaveStatus, reason?: string) => {
+        try {
+            await api.updateLeaveStatus(id, status, reason);
+            addToast(`Status cuti berhasil diubah menjadi ${status}`, 'success');
+            await refreshData();
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Gagal memperbarui status cuti', 'error');
+        }
     };
 
     const handleApprove = (id: string) => {
@@ -558,7 +546,7 @@ const LeaveManagement: React.FC = () => {
 
 const AttendanceManagement: React.FC = () => {
     const { db } = useContext(DataContext);
-    const { attendance: records } = db;
+    const { attendance: records } = db!;
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
     const calculateDuration = (start: string | null, end: string | null): string => {
@@ -649,7 +637,7 @@ const AttendanceManagement: React.FC = () => {
 };
 
 
-const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string}, onSave: (review: PerformanceReview) => void, onClose: () => void }> = ({ employee, onSave, onClose }) => {
+const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string}, onSave: (review: Omit<PerformanceReview, 'id' | 'overallScore'>) => void, onClose: () => void }> = ({ employee, onSave, onClose }) => {
     const defaultKpi: Omit<KPI, 'id'> = { metric: '', target: '', result: '', weight: 0, score: 3, notes: '' };
     const [reviewData, setReviewData] = useState<Omit<PerformanceReview, 'id' | 'employeeId' | 'employeeName' | 'overallScore'>>({
         period: 'Q3 2024',
@@ -681,21 +669,12 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
         setReviewData({ ...reviewData, kpis });
     };
 
-    const calculateOverallScore = () => {
-        const totalWeight = reviewData.kpis.reduce((sum, kpi) => sum + kpi.weight, 0);
-        if (totalWeight === 0) return 0;
-        const weightedScore = reviewData.kpis.reduce((sum, kpi) => sum + (kpi.score * kpi.weight), 0);
-        return parseFloat((weightedScore / totalWeight).toFixed(2));
-    };
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const finalReview: PerformanceReview = {
+        const finalReview = {
             ...reviewData,
-            id: `pr-${Date.now()}`,
             employeeId: employee.id,
             employeeName: employee.name,
-            overallScore: calculateOverallScore(),
         };
         onSave(finalReview);
     };
@@ -738,9 +717,9 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
 };
 
 const PerformanceManagement: React.FC = () => {
-    const { db, updateDb } = useContext(DataContext);
-    const { performanceReviews, employees, users } = db;
-    const { simulateApiCall } = useApi();
+    const { db, refreshData } = useContext(DataContext);
+    const { addToast } = useToast();
+    const { performanceReviews, employees, users } = db!;
     
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState<{id: string, name: string} | null>(null);
@@ -750,11 +729,26 @@ const PerformanceManagement: React.FC = () => {
         setFormModalOpen(true);
     };
 
-    const handleSaveReview = (newReview: PerformanceReview) => {
-        simulateApiCall(async () => {
-            updateDb({ ...db, performanceReviews: [newReview, ...db.performanceReviews] });
+    const handleSaveReview = async (newReview: Omit<PerformanceReview, 'id' | 'overallScore'>) => {
+        try {
+            // FIX: The api function expects an `overallScore`, which is calculated on the backend.
+            // To satisfy the frontend type, we calculate it here. The backend will use its own calculation.
+            const totalWeight = newReview.kpis.reduce((sum, kpi) => sum + kpi.weight, 0) || 1;
+            const weightedScore = newReview.kpis.reduce((sum, kpi) => sum + (kpi.score * kpi.weight), 0);
+            const overallScore = parseFloat((weightedScore / totalWeight).toFixed(2));
+
+            const reviewToSend = {
+                ...newReview,
+                overallScore,
+            };
+
+            await api.createPerformanceReview(reviewToSend);
+            addToast("Penilaian kinerja berhasil disimpan.", 'success');
+            await refreshData();
             setFormModalOpen(false);
-        }, "Menyimpan penilaian kinerja...");
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Gagal menyimpan penilaian.", 'error');
+        }
     };
 
     return (
@@ -876,9 +870,9 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
 };
 
 const PayrollManagement: React.FC = () => {
-    const { db, updateDb } = useContext(DataContext);
-    const { employees, users } = db;
-    const { simulateApiCall } = useApi();
+    const { db, refreshData } = useContext(DataContext);
+    const { addToast } = useToast();
+    const { employees, users } = db!;
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState<{employee: Employee, user: User} | null>(null);
@@ -896,12 +890,15 @@ const PayrollManagement: React.FC = () => {
         setSelectedEmployee(null);
     };
 
-    const handleSavePayroll = (employeeId: string, payrollInfo: PayrollInfo) => {
-        simulateApiCall(async () => {
-            const newEmployees = employees.map(emp => emp.id === employeeId ? { ...emp, payrollInfo } : emp);
-            updateDb({ ...db, employees: newEmployees });
+    const handleSavePayroll = async (employeeId: string, payrollInfo: PayrollInfo) => {
+        try {
+            await api.updatePayrollInfo(employeeId, payrollInfo);
+            addToast("Pengaturan gaji berhasil disimpan.", 'success');
+            await refreshData();
             closeModal();
-        }, "Menyimpan pengaturan gaji...");
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Gagal menyimpan pengaturan gaji.", 'error');
+        }
     };
 
     return (
@@ -951,16 +948,20 @@ const PayrollManagement: React.FC = () => {
 }
 const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> = ({ reportName, onClose }) => {
     const [email, setEmail] = useState('');
-    const { simulateApiCall } = useApi();
+    const { addToast } = useToast();
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email) return;
 
-        simulateApiCall(async () => {
-            console.log(`Simulating email send for ${reportName} to ${email}`);
+        try {
+            // Using a generic endpoint for simulation purposes
+            await api.submitDataChangeRequest(`Sending ${reportName} to ${email}`);
+            addToast(`${reportName} berhasil dikirim ke ${email}`, 'success');
             onClose();
-        }, `Mengirim ${reportName} ke ${email}...`, `${reportName} berhasil dikirim.`);
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Gagal mengirim laporan", 'error');
+        }
     };
 
     return (
@@ -1030,6 +1031,8 @@ export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
     const { db } = useContext(DataContext);
     
+    if (!db) return null; // or a loading spinner
+
     const pendingRequestsCount = useMemo(() => db.leaveRequests.filter(r => r.status === LeaveStatus.PENDING).length, [db.leaveRequests]);
 
     const navLinksWithBadge = useMemo(() => {

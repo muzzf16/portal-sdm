@@ -1,11 +1,8 @@
-
 import React, { useState, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Input } from '../components/ui';
-import { DataContext } from '../context/DataContext';
-import { useApi } from '../hooks/useApi';
+import api from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { Employee, User, Role } from '../types';
 
 export const RegisterPage: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -15,10 +12,9 @@ export const RegisterPage: React.FC = () => {
         confirmPassword: ''
     });
     const [error, setError] = useState('');
-    const { db, updateDb } = useContext(DataContext);
-    const { simulateApiCall } = useApi();
     const { addToast } = useToast();
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -32,59 +28,17 @@ export const RegisterPage: React.FC = () => {
             setError('Kata sandi dan konfirmasi kata sandi tidak cocok.');
             return;
         }
-
-        const emailExists = db.users.some(user => user.email.toLowerCase() === formData.email.toLowerCase());
-        if (emailExists) {
-            setError('Email ini sudah terdaftar. Silakan gunakan email lain.');
-            return;
-        }
-
-        await simulateApiCall(async () => {
-            const newEmployeeId = `emp-${Date.now()}`;
-            const newUserId = `user-${Date.now()}`;
-            const joinDate = new Date().toISOString().split('T')[0];
-
-            const newEmployee: Employee = {
-                id: newEmployeeId,
-                nip: `NIP${Date.now().toString().slice(-4)}`,
-                position: 'Staf Junior',
-                pangkat: 'Staf',
-                golongan: 'II/a',
-                department: 'Belum Ditentukan',
-                joinDate,
-                avatarUrl: `https://picsum.photos/seed/${newEmployeeId}/200`,
-                leaveBalance: 12,
-                isActive: true,
-                address: '',
-                phone: '',
-                pob: '',
-                dob: '',
-                religion: 'Lainnya',
-                maritalStatus: 'Lajang',
-                numberOfChildren: 0,
-                educationHistory: [],
-                workHistory: [],
-                trainingCertificates: [],
-                payrollInfo: { baseSalary: 5000000, incomes: [], deductions: [] }
-            };
-
-            const newUser: User = {
-                id: newUserId,
-                name: formData.name,
-                email: formData.email,
-                role: Role.EMPLOYEE,
-                employeeDetails: newEmployee,
-            };
-
-            updateDb({
-                ...db,
-                employees: [...db.employees, newEmployee],
-                users: [...db.users, newUser]
-            });
-
-        }, 'Mendaftarkan akun baru...', 'Registrasi berhasil! Silakan masuk.');
         
-        navigate('/login');
+        setIsLoading(true);
+        try {
+            await api.register(formData);
+            addToast('Registrasi berhasil! Silakan masuk.', 'success');
+            navigate('/login');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Registrasi gagal. Silakan coba lagi.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -106,8 +60,8 @@ export const RegisterPage: React.FC = () => {
                     
                     {error && <p className="text-red-500 text-sm">{error}</p>}
                     
-                    <Button type="submit" className="w-full text-lg py-3">
-                        Daftar
+                    <Button type="submit" className="w-full text-lg py-3" disabled={isLoading}>
+                        {isLoading ? 'Mendaftar...' : 'Daftar'}
                     </Button>
                 </form>
                 <div className="text-center mt-6">

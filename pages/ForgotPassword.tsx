@@ -1,37 +1,28 @@
-
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Input } from '../components/ui';
-import { DataContext } from '../context/DataContext';
-import { useApi } from '../hooks/useApi';
+import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 
 export const ForgotPasswordPage: React.FC = () => {
     const [email, setEmail] = useState('');
-    const [error, setError] = useState('');
-    const { db } = useContext(DataContext);
-    const { simulateApiCall } = useApi();
+    const [isLoading, setIsLoading] = useState(false);
+    const { addToast } = useToast();
     const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
+        setIsLoading(true);
 
-        const emailExists = db.users.some(user => user.email.toLowerCase() === email.toLowerCase());
-        
-        if (!emailExists) {
-            // To prevent user enumeration, we show the same message regardless of whether the email exists.
-            // But for this mock app, we can show an error for clarity.
-            setError('Email tidak ditemukan di sistem kami.');
-            return;
+        try {
+            await api.submitDataChangeRequest(email); // Using a generic endpoint for simulation
+            addToast('Jika email Anda terdaftar, Anda akan menerima tautan reset.', 'success');
+            navigate('/login');
+        } catch (error) {
+             addToast(error instanceof Error ? error.message : 'Gagal mengirim permintaan.', 'error');
+        } finally {
+            setIsLoading(false);
         }
-
-        await simulateApiCall(async () => {
-            // In a real app, this would trigger a backend service to send an email.
-            console.log(`Password reset link sent to: ${email}`);
-        }, `Mengirim tautan reset ke ${email}...`, 'Tautan reset kata sandi telah dikirim.');
-        
-        navigate('/login');
     };
 
     return (
@@ -56,10 +47,8 @@ export const ForgotPasswordPage: React.FC = () => {
                         placeholder="anda@perusahaan.com"
                     />
                     
-                    {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-
-                    <Button type="submit" className="w-full text-lg py-3">
-                        Kirim Tautan Reset
+                    <Button type="submit" className="w-full text-lg py-3" disabled={isLoading}>
+                        {isLoading ? 'Mengirim...' : 'Kirim Tautan Reset'}
                     </Button>
                 </form>
                 <div className="text-center mt-6">

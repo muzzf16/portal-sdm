@@ -1,18 +1,25 @@
-
 import React, { useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../App';
-import { MOCK_DB } from '../constants';
 import { Role } from '../types';
 import { Button, Card } from '../components/ui';
+import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 export const LoginPage: React.FC = () => {
     const { login } = useContext(AuthContext);
+    const { addToast } = useToast();
 
-    const handleLogin = (role: Role) => {
-        const userToLogin = MOCK_DB.users.find(u => u.role === role);
-        if (userToLogin) {
-            login(userToLogin);
+    const handleLogin = async (role: Role) => {
+        try {
+            const userToLogin = await api.login(role);
+            if (userToLogin) {
+                login(userToLogin);
+                addToast(`Selamat datang, ${userToLogin.name}!`, 'success');
+            }
+        } catch (error) {
+            console.error("Login failed:", error);
+            addToast(error instanceof Error ? error.message : 'Login gagal.', 'error');
         }
     };
 
