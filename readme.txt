@@ -4,9 +4,9 @@ SISTEM MANAJEMEN SDM - PETUNJUK INSTALASI LOKAL
 
 PENDAHULUAN
 -----------
-Dokumen ini berisi panduan untuk melakukan instalasi dan menjalankan aplikasi Sistem Manajemen SDM di komputer lokal Anda. Aplikasi ini adalah aplikasi full-stack dengan frontend React dan backend Node.js (Express) yang sekarang menggunakan database SQLite untuk persistensi data.
+Dokumen ini berisi panduan untuk melakukan instalasi dan menjalankan aplikasi Sistem Manajemen SDM di komputer lokal Anda. Aplikasi ini adalah aplikasi full-stack dengan frontend React yang terpisah dan backend Node.js (Express) yang menggunakan database SQLite.
 
-Perubahan Kunci: Aplikasi ini telah dimigrasi dari database file-JSON (`db.json`) ke database SQL (`database.sqlite`). Ini memberikan penyimpanan data yang lebih kuat, aman, dan andal. Perubahan yang Anda buat di aplikasi (misalnya, menambah karyawan) akan disimpan secara permanen di file database ini.
+Perubahan Kunci: Proyek ini telah direstrukturisasi menjadi dua folder utama: `frontend` dan `backend` untuk keteraturan yang lebih baik. Backend sekarang menyajikan file-file frontend.
 
 PRASYARAT
 ---------
@@ -15,82 +15,80 @@ PRASYARAT
 
 STRUKTUR FOLDER
 ---------------
-Pastikan Anda membuat struktur folder dan file persis seperti di bawah ini di dalam folder proyek utama Anda (misalnya, `proyek-sdm`):
+Pastikan Anda membuat struktur folder dan file persis seperti di bawah ini di dalam folder proyek utama Anda.
 
 proyek-sdm/
-├── components/
-│   ├── Layout.tsx
-│   └── ui.tsx
-├── context/
-│   ├── DataContext.tsx
-│   └── ToastContext.tsx
-├── pages/
-│   ├── Admin.tsx
-│   ├── Employee.tsx
-│   ├── Landing.tsx
-│   ├── Login.tsx
-│   ├── Register.tsx
-│   └── ForgotPassword.tsx
-├── services/
-│   └── api.ts
-├── App.tsx
-├── constants.tsx
+├── backend/
+│   ├── server.js
+│   ├── package.json
+│   ├── db.json               <-- (DATA AWAL/SEED)
+│   └── database.sqlite   <-- (Akan dibuat secara otomatis)
+├── frontend/
+│   ├── components/
+│   │   ├── Layout.tsx
+│   │   └── ui.tsx
+│   ├── context/
+│   │   ├── DataContext.tsx
+│   │   └── ToastContext.tsx
+│   ├── pages/
+│   │   ├── Admin.tsx
+│   │   ├── Employee.tsx
+│   │   ├── Landing.tsx
+│   │   ├── Login.tsx
+│   │   ├── Register.tsx
+│   │   └── ForgotPassword.tsx
+│   ├── services/
+│   │   └── api.ts
+│   ├── App.tsx
+│   ├── constants.tsx
+│   ├── index.html
+│   ├── index.tsx
+│   └── types.ts
 ├── database_schema.txt
-├── db.json               <-- (HANYA UNTUK DATA AWAL/SEED)
-├── index.html
-├── index.tsx
 ├── metadata.json
-├── package.json
-├── readme.txt
-├── server.js             <-- (DIPERBARUI: Backend Server dengan SQLite)
-└── types.ts
-
-*CATATAN: File `database.sqlite` akan dibuat secara otomatis saat Anda menjalankan server untuk pertama kalinya.*
-
-STRUKTUR DATA (SKEMA DATABASE)
------------------------------
-Aplikasi ini menggunakan skema database SQL yang didefinisikan dalam `server.js` dan didokumentasikan dalam file `database_schema.txt`.
+└── readme.txt
 
 LANGKAH-LANGKAH INSTALASI
 -------------------------
 1. Buat folder utama untuk proyek, misalnya `proyek-sdm`.
-2. Di dalam `proyek-sdm`, buat subfolder berikut: `components`, `context`, `pages`, dan `services`.
-3. Buat setiap file di dalam folder yang sesuai seperti yang tercantum dalam STRUKTUR FOLDER di atas.
-4. Salin (copy) dan tempel (paste) seluruh konten dari setiap file yang telah disediakan ke dalam file yang baru saja Anda buat. Pastikan nama file dan lokasinya sudah benar.
+2. Di dalam `proyek-sdm`, buat subfolder `frontend` dan `backend`.
+3. Di dalam `frontend`, buat subfolder `components`, `context`, `pages`, dan `services`.
+4. Buat setiap file di dalam folder yang sesuai seperti yang tercantum dalam STRUKTUR FOLDER di atas.
+5. Salin (copy) dan tempel (paste) seluruh konten dari setiap file yang telah disediakan ke dalam file yang baru saja Anda buat. Pastikan nama file dan lokasinya sudah benar.
 
 MENJALANKAN APLIKASI
 --------------------
-Aplikasi ini sekarang dijalankan menggunakan server Node.js dengan database SQLite. Ikuti langkah-langkah berikut:
+Aplikasi ini sekarang memiliki folder terpisah untuk backend dan frontend. Server backend akan menyajikan file frontend.
 
 1. Buka Terminal atau Command Prompt.
 
-2. Arahkan direktori ke folder utama proyek Anda.
-   Contoh: `cd path/ke/folder/proyek-sdm`
+2. Arahkan direktori ke folder `backend` di dalam proyek Anda.
+   Contoh: `cd path/ke/folder/proyek-sdm/backend`
 
-3. Instal dependensi yang diperlukan. Perintah ini akan membaca file `package.json` dan mengunduh library yang dibutuhkan (Express.js dan driver SQLite).
+3. Instal dependensi yang diperlukan untuk server. Perintah ini akan membaca file `package.json` dan mengunduh library yang dibutuhkan.
    `npm install`
 
-4. Setelah instalasi selesai, jalankan server backend.
+4. Setelah instalasi selesai, jalankan server backend dari dalam folder `backend`.
    `npm start`
 
 5. Anda akan melihat pesan di terminal yang menandakan server sudah berjalan dan terhubung ke database SQLite, contohnya:
    `Server Sistem Manajemen SDM berjalan di http://localhost:3000`
    `Connected to the SQLite database.`
-   `Database file is at: /path/ke/folder/proyek-sdm/database.sqlite`
+   `Database file is at: /path/ke/folder/proyek-sdm/backend/database.sqlite`
 
    Pada saat pertama kali dijalankan, server akan secara otomatis:
-   a. Membuat file `database.sqlite`.
+   a. Membuat file `database.sqlite` di dalam folder `backend`.
    b. Membuat semua tabel yang diperlukan.
    c. Mengisi tabel-tabel tersebut dengan data awal dari `db.json`.
 
 6. Buka web browser Anda dan kunjungi alamat berikut:
    `http://localhost:3000`
 
-Aplikasi Sistem Manajemen SDM sekarang seharusnya sudah berjalan. Semua data diambil dari dan disimpan ke database SQLite secara permanen.
+Aplikasi Sistem Manajemen SDM sekarang seharusnya sudah berjalan.
 
 CARA PENGGUNAAN
 ---------------
 1. Setelah aplikasi terbuka, Anda akan disambut oleh Landing Page.
 2. Klik tombol "Masuk" untuk pergi ke halaman login.
 3. Di halaman login, Anda dapat memilih untuk masuk sebagai "Admin (SDM)" atau "Karyawan".
-4. Semua data yang Anda ubah (menambah karyawan, menyetujui cuti, dll.) sekarang akan dikirim ke server dan disimpan secara permanen di file `database.sqlite`.
+4. Semua data yang Anda ubah akan dikirim ke server dan disimpan secara permanen di file `database.sqlite` di dalam folder `backend`.
