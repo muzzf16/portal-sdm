@@ -40,6 +40,12 @@ app.get('/api/data', (req, res) => {
     res.json(db);
 });
 
+// GET leave requests data
+app.get('/api/leave-requests', (req, res) => {
+    const db = readDb();
+    res.json(db.leaveRequests);
+});
+
 // POST login
 app.post('/api/login', (req, res) => {
     const { role } = req.body;
