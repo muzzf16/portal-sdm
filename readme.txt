@@ -4,12 +4,12 @@ SISTEM MANAJEMEN SDM - PETUNJUK INSTALASI LOKAL
 
 PENDAHULUAN
 -----------
-Dokumen ini berisi panduan untuk melakukan instalasi dan menjalankan aplikasi Sistem Manajemen SDM (Sumber Daya Manusia) di komputer lokal Anda. Aplikasi ini adalah aplikasi frontend murni yang tidak memerlukan database atau backend khusus karena menggunakan data tiruan (mock data) yang disimpan di localStorage browser.
+Dokumen ini berisi panduan untuk melakukan instalasi dan menjalankan aplikasi Sistem Manajemen SDM (Sumber Daya Manusia) di komputer lokal Anda. Aplikasi ini adalah aplikasi full-stack dengan frontend React dan backend Node.js (Express) yang menyajikan data tiruan (mock data).
 
 PRASYARAT
 ---------
 1. Web Browser Modern: Google Chrome, Mozilla Firefox, Microsoft Edge, atau sejenisnya.
-2. (Opsional, tapi sangat direkomendasikan) Python 3 atau Node.js terinstal untuk menjalankan server web lokal.
+2. Node.js dan npm (Node Package Manager) terinstal di komputer Anda. Anda bisa mengunduhnya dari https://nodejs.org/.
 
 STRUKTUR FOLDER
 ---------------
@@ -32,20 +32,20 @@ proyek-sdm/
 ├── App.tsx
 ├── constants.tsx
 ├── database_schema.txt
+├── db.js                 <-- (File data untuk backend)
 ├── index.html
 ├── index.tsx
 ├── metadata.json
+├── package.json          <-- (File Konfigurasi Proyek Node.js)
 ├── readme.txt
+├── server.js             <-- (File Backend Server)
 └── types.ts
 
 STRUKTUR DATA (SKEMA DATABASE)
 -----------------------------
-Aplikasi ini menggunakan model data yang disimpan di localStorage browser untuk mensimulasikan database. Untuk pemahaman mendalam tentang struktur data, relasi antar tabel, dan detail setiap kolom, silakan merujuk ke file:
+Aplikasi ini menggunakan model data yang didefinisikan dalam file `db.js` untuk mensimulasikan database. Untuk pemahaman mendalam tentang struktur data, silakan merujuk ke file:
 
 `database_schema.txt`
-
-Dokumen tersebut menjelaskan setiap "tabel" data seperti `users`, `employees`, `leaveRequests`, dll.
-
 
 LANGKAH-LANGKAH INSTALASI
 -------------------------
@@ -56,36 +56,30 @@ LANGKAH-LANGKAH INSTALASI
 
 MENJALANKAN APLIKASI
 --------------------
-Karena aplikasi ini menggunakan ES Modules, Anda tidak bisa hanya membuka file `index.html` langsung dari file explorer (menggunakan protokol `file:///`). Anda harus menjalankannya melalui server web lokal.
-
-Berikut cara termudah menggunakan Python (biasanya sudah terinstal di macOS/Linux):
+Aplikasi ini sekarang dijalankan menggunakan server Node.js. Ikuti langkah-langkah berikut:
 
 1. Buka Terminal atau Command Prompt.
+
 2. Arahkan direktori ke folder utama proyek Anda.
    Contoh: `cd path/ke/folder/proyek-sdm`
 
-3. Jalankan perintah server web sederhana:
-   - Jika Anda menggunakan Python 3:
-     `python -m http.server 8000`
-   - Jika Anda menggunakan Python 2 (lebih lama):
-     `python -m SimpleHTTPServer 8000`
+3. Instal dependensi yang diperlukan. Perintah ini akan membaca file `package.json` dan mengunduh library yang dibutuhkan (seperti Express.js).
+   `npm install`
 
-4. Buka web browser Anda dan kunjungi alamat berikut:
-   `http://localhost:8000`
+4. Setelah instalasi selesai, jalankan server backend.
+   `npm start`
 
-Aplikasi Sistem Manajemen SDM sekarang seharusnya sudah berjalan.
+5. Anda akan melihat pesan di terminal yang menandakan server sudah berjalan, contohnya:
+   `Server Sistem Manajemen SDM berjalan di http://localhost:3000`
 
-Alternatif (menggunakan Node.js):
-Jika Anda memiliki Node.js, Anda bisa menggunakan paket `serve`.
-1. Buka Terminal atau Command Prompt di folder proyek.
-2. Jalankan perintah: `npx serve`
-3. Buka browser Anda ke alamat yang ditampilkan di terminal (biasanya `http://localhost:3000`).
+6. Buka web browser Anda dan kunjungi alamat berikut:
+   `http://localhost:3000`
+
+Aplikasi Sistem Manajemen SDM sekarang seharusnya sudah berjalan, disajikan oleh backend Node.js Anda.
 
 CARA PENGGUNAAN
 ---------------
 1. Setelah aplikasi terbuka, Anda akan disambut oleh Landing Page.
 2. Klik tombol "Masuk" untuk pergi ke halaman login.
 3. Di halaman login, Anda dapat memilih untuk masuk sebagai "Admin (SDM)" atau "Karyawan".
-   - **Admin**: Memiliki akses penuh untuk mengelola data karyawan, cuti, penggajian, dll.
-   - **Karyawan**: Memiliki akses ke dasbor pribadi, profil, pengajuan cuti, dan melihat slip gaji.
-4. Semua data yang Anda ubah (menambah karyawan, menyetujui cuti, dll.) akan disimpan di localStorage browser, sehingga perubahan akan tetap ada bahkan setelah Anda me-refresh halaman.
+4. Semua data yang Anda ubah (menambah karyawan, menyetujui cuti, dll.) akan tetap disimpan di localStorage browser. Frontend belum terhubung ke API backend.
