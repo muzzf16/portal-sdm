@@ -1,25 +1,37 @@
-import React, { useContext } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useContext, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../App';
-import { Role } from '../types';
-import { Button, Card } from '../components/ui';
+import { Button, Card, Input } from '../components/ui';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 
 export const LoginPage: React.FC = () => {
     const { login } = useContext(AuthContext);
     const { addToast } = useToast();
+    const navigate = useNavigate();
 
-    const handleLogin = async (role: Role) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
         try {
-            const userToLogin = await api.login(role);
+            const userToLogin = await api.login({ email, password });
             if (userToLogin) {
                 login(userToLogin);
                 addToast(`Selamat datang, ${userToLogin.name}!`, 'success');
+                navigate('/'); // Redirect to dashboard after login
             }
         } catch (error) {
-            console.error("Login failed:", error);
-            addToast(error instanceof Error ? error.message : 'Login gagal.', 'error');
+            const errorMessage = error instanceof Error ? error.message : 'Login gagal. Periksa kembali email dan kata sandi Anda.';
+            setError(errorMessage);
+            addToast(errorMessage, 'error');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -33,23 +45,37 @@ export const LoginPage: React.FC = () => {
                  <p className="text-gray-500 text-lg mt-2">Masuk untuk mengakses dasbor Anda.</p>
             </div>
             <Card className="w-full max-w-sm">
-                 <h2 className="text-2xl font-semibold text-center text-gray-800 mb-6">Pilih Peran Anda</h2>
-                 <div className="space-y-4">
+                 <h2 className="text-2xl font-semibold text-center text-gray-800 mb-6">Masuk ke Akun Anda</h2>
+                 <form onSubmit={handleSubmit} className="space-y-4">
+                    <Input 
+                        label="Alamat Email"
+                        id="email"
+                        name="email"
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        required
+                        placeholder="anda@perusahaan.com"
+                    />
+                    <Input 
+                        label="Kata Sandi"
+                        id="password"
+                        name="password"
+                        type="password"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                    />
+                    {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                     <Button
-                        onClick={() => handleLogin(Role.ADMIN)}
+                        type="submit"
                         className="w-full text-lg py-3"
-                        variant="primary"
+                        disabled={isLoading}
                     >
-                        Masuk sebagai Admin (SDM)
+                        {isLoading ? 'Memproses...' : 'Masuk'}
                     </Button>
-                    <Button
-                        onClick={() => handleLogin(Role.EMPLOYEE)}
-                        className="w-full text-lg py-3"
-                        variant="secondary"
-                    >
-                        Masuk sebagai Karyawan
-                    </Button>
-                 </div>
+                 </form>
                  <div className="text-sm text-center mt-6 flex justify-between">
                     <Link to="/forgot-password" className="text-primary-600 hover:underline">
                         Lupa kata sandi?

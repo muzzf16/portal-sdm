@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -72,7 +73,7 @@ const initializeDb = () => {
         // Create Tables
         db.exec(`
             CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, role TEXT, employeeId TEXT
+                id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, role TEXT, employeeId TEXT
             );
             CREATE TABLE IF NOT EXISTS employees (
                 id TEXT PRIMARY KEY, nip TEXT UNIQUE, position TEXT, pangkat TEXT, golongan TEXT, department TEXT, joinDate TEXT, avatarUrl TEXT, leaveBalance INTEGER, isActive INTEGER, address TEXT, phone TEXT, pob TEXT, dob TEXT, religion TEXT, maritalStatus TEXT, numberOfChildren INTEGER, educationHistory TEXT, workHistory TEXT, trainingCertificates TEXT, payrollInfo TEXT
@@ -110,8 +111,10 @@ const seedDatabase = () => {
                     const insertStmt = (table, keys) => `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`;
                     
                     // Seed Users
-                    const userStmt = db.prepare(insertStmt('users', ['id', 'name', 'email', 'role', 'employeeId']));
-                    seedData.users.forEach(u => userStmt.run(u.id, u.name, u.email, u.role, u.employeeDetails.id));
+                    const userStmt = db.prepare(insertStmt('users', ['id', 'name', 'email', 'password', 'role', 'employeeId']));
+                    const salt = bcrypt.genSaltSync(10);
+                    const hashedPassword = bcrypt.hashSync('password123', salt); // Default password for all
+                    seedData.users.forEach(u => userStmt.run(u.id, u.name, u.email, hashedPassword, u.role, u.employeeDetails.id));
                     userStmt.finalize();
 
                     // Seed Employees
@@ -199,16 +202,26 @@ app.get('/api/leave-requests', async (req, res) => {
     }
 });
 
-// POST login
-app.post('/api/login', async (req, res) => {
-    const { role } = req.body;
+// POST login with credentials
+app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
     try {
-        const user = await dbGet("SELECT * FROM users WHERE role = ?", [role]);
-        if (!user) return res.status(404).json({ message: `User with role ${role} not found` });
+        const user = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
+        if (!user) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid credentials." });
+        }
 
         const employee = await dbGet("SELECT * FROM employees WHERE id = ?", [user.employeeId]);
         user.employeeDetails = parseJsonFields([employee])[0];
-        res.json(user);
+        
+        const { password: _, ...userWithoutPassword } = user;
+
+        res.json(userWithoutPassword);
     } catch (err) {
         res.status(500).json({ "error": err.message });
     }
@@ -216,12 +229,15 @@ app.post('/api/login', async (req, res) => {
 
 // POST register (REFACTORED WITH TRANSACTIONS)
 app.post('/api/register', async (req, res) => {
-    const { name, email } = req.body;
+    const { name, email, password } = req.body; // Added password
     try {
         const existingUser = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
         if (existingUser) {
             return res.status(400).json({ message: 'Email already exists' });
         }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
 
         const newEmployeeId = `emp-${Date.now()}`;
         const newUserId = `user-${Date.now()}`;
@@ -230,11 +246,11 @@ app.post('/api/register', async (req, res) => {
         const newEmployee = {
             id: newEmployeeId, nip: `NIP${Date.now().toString().slice(-4)}`, position: 'Staf Junior', pangkat: 'Staf', golongan: 'II/a', department: 'Belum Ditentukan', joinDate, avatarUrl: `https://picsum.photos/seed/${newEmployeeId}/200`, leaveBalance: 12, isActive: 1, address: '', phone: '', pob: '', dob: '', religion: 'Lainnya', maritalStatus: 'Lajang', numberOfChildren: 0, educationHistory: '[]', workHistory: '[]', trainingCertificates: '[]', payrollInfo: JSON.stringify({ baseSalary: 5000000, incomes: [], deductions: [] })
         };
-        const newUser = { id: newUserId, name, email, role: 'EMPLOYEE', employeeId: newEmployeeId };
+        const newUser = { id: newUserId, name, email, password: hashedPassword, role: 'EMPLOYEE', employeeId: newEmployeeId };
 
         await dbRun('BEGIN TRANSACTION');
         await dbRun('INSERT INTO employees (id, nip, position, pangkat, golongan, department, joinDate, avatarUrl, leaveBalance, isActive, address, phone, pob, dob, religion, maritalStatus, numberOfChildren, educationHistory, workHistory, trainingCertificates, payrollInfo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', Object.values(newEmployee));
-        await dbRun('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser));
+        await dbRun('INSERT INTO users (id, name, email, password, role, employeeId) VALUES (?,?,?,?,?,?)', Object.values(newUser));
         await dbRun('COMMIT');
         
         res.status(201).json({ message: 'Registration successful', userId: newUserId });

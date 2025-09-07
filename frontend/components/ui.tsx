@@ -6,7 +6,7 @@ interface CardProps {
 }
 
 export const Card: React.FC<CardProps> = ({ children, className }) => (
-  <div className={`bg-white shadow-md rounded-lg p-6 ${className}`}>
+  <div className={['bg-white shadow-md rounded-lg p-6', className].filter(Boolean).join(' ')}>
     {children}
   </div>
 );
@@ -52,8 +52,10 @@ export const Button: React.FC<ButtonProps> = ({ children, variant = 'primary', c
     success: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
   };
 
+  const finalClassName = [baseClasses, variantClasses[variant], className].filter(Boolean).join(' ');
+
   return (
-    <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} {...props}>
+    <button className={finalClassName} {...props}>
       {children}
     </button>
   );
@@ -70,7 +72,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4 print:!static print:p-0 print:bg-white">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4 print:!static print:p-0 print:bg-white" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-lg print:shadow-none print:border-none print:w-full print:max-w-none" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b flex justify-between items-center print:hidden">
           <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
@@ -123,7 +125,7 @@ export interface ToastMessage {
     type: 'info' | 'success' | 'error';
 }
 
-export const Toast: React.FC<ToastMessage> = ({ message, type }) => {
+export const Toast: React.FC<ToastMessage> = ({ id, message, type }) => {
     const baseClasses = "flex items-center w-full max-w-xs p-4 space-x-4 rtl:space-x-reverse divide-x rtl:divide-x-reverse rounded-lg shadow text-gray-400 bg-gray-800 divide-gray-700";
     
     const icons = {
@@ -145,7 +147,7 @@ export const Toast: React.FC<ToastMessage> = ({ message, type }) => {
     }
 
     return (
-        <div id={`toast-${type}`} className={baseClasses} role="alert">
+        <div id={`toast-${id}`} className={baseClasses} role="alert">
             <div className="text-sm font-normal">{icons[type]}</div>
             <div className="ps-4 text-sm font-normal">{message}</div>
         </div>

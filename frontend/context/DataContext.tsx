@@ -41,12 +41,14 @@ export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }
         try {
             const data = await api.getFullDatabase();
             
-            // Backend sends user.employeeDetails as {id: "emp-xxx"}
-            // We need to hydrate it with the full employee object for frontend use
-            const hydratedUsers = data.users.map((user: User) => {
-                if (user.employeeDetails) {
-                    const employee = data.employees.find((e: Employee) => e.id === (user.employeeDetails as any).id);
-                    return { ...user, employeeDetails: employee };
+            // The backend sends user objects with an `employeeId` property.
+            // We need to replace this with the full `employeeDetails` object
+            // for easier use on the frontend.
+            const hydratedUsers = data.users.map((user: any) => {
+                if (user.employeeId) {
+                    const employee = data.employees.find((e: Employee) => e.id === user.employeeId);
+                    const { employeeId, ...userWithoutId } = user;
+                    return { ...userWithoutId, employeeDetails: employee };
                 }
                 return user;
             });

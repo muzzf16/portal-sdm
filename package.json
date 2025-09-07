@@ -1,14 +1,8 @@
 {
-  "name": "sistem-manajemen-sdm",
-  "version": "1.0.0",
-  "description": "Sistem Manajemen Sumber Daya Manusia yang komprehensif untuk mengelola karyawan, cuti, penggajian, dan kinerja.",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "sqlite3": "^5.1.7"
-  }
+  "name": "sistem-manajemen-sdm-monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ]
 }

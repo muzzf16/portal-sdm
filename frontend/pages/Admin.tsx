@@ -8,6 +8,12 @@ import { DataContext } from '../context/DataContext';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 
+// @ts-ignore
+import jsPDF from 'jspdf';
+// @ts-ignore
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+
 const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
     const [isVisible, setIsVisible] = useState(true);
 
@@ -236,6 +242,17 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setFormData({ ...formData, avatarUrl: reader.result as string });
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const handleDynamicChange = (index: number, e: React.ChangeEvent<HTMLInputElement>, field: 'educationHistory' | 'workHistory' | 'trainingCertificates') => {
         const list = [...(formData[field] || [])];
         list[index] = { ...list[index], [e.target.name]: e.target.value };
@@ -266,6 +283,20 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
     return (
         <Modal isOpen={true} onClose={onClose} title={employee ? "Ubah Data Karyawan" : "Tambah Karyawan"}>
             <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+
+                <fieldset className="border p-4 rounded-md">
+                    <legend className="px-2 font-semibold">Foto Profil</legend>
+                    <div className="flex items-center gap-4">
+                        <img src={formData.avatarUrl} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-2 border-gray-200" />
+                        <div>
+                            <label htmlFor="avatarUpload" className="cursor-pointer bg-white py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm leading-4 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                                <span>Ganti Foto</span>
+                                <input id="avatarUpload" name="avatar" type="file" className="sr-only" onChange={handleFileChange} accept="image/*" />
+                            </label>
+                            <p className="text-xs text-gray-500 mt-1">PNG, JPG, GIF hingga 1MB.</p>
+                        </div>
+                    </div>
+                </fieldset>
                 
                 <fieldset className="border p-4 rounded-md">
                     <legend className="px-2 font-semibold">Informasi Akun & Pekerjaan</legend>
@@ -985,13 +1016,65 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
 };
 
 const Reports: React.FC = () => {
+    const { db } = useContext(DataContext);
+    const { addToast } = useToast();
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
     const [selectedReport, setSelectedReport] = useState('');
-    
+
     const openEmailModal = (reportName: string) => {
         setSelectedReport(reportName);
         setIsEmailModalOpen(true);
     }
+
+    const handleDownloadPdf = () => {
+        if (!db) {
+            addToast('Data tidak tersedia untuk membuat laporan.', 'error');
+            return;
+        }
+        // Make sure to install: npm install jspdf jspdf-autotable
+        const doc = new jsPDF();
+        doc.text("Laporan Kehadiran Bulanan", 14, 15);
+
+        const head = [['Nama Karyawan', 'Tanggal', 'Clock In', 'Clock Out', 'Durasi Kerja', 'Status']];
+        const body = db.attendance.map(att => [
+            att.employeeName,
+            att.date,
+            att.clockIn || '-',
+            att.clockOut || '-',
+            att.workDuration || '-',
+            att.status
+        ]);
+
+        (doc as any).autoTable({
+            startY: 20,
+            head: head,
+            body: body,
+        });
+
+        doc.save('laporan_kehadiran.pdf');
+        addToast('Laporan PDF berhasil diunduh.', 'success');
+    };
+
+    const handleDownloadExcel = () => {
+        if (!db) {
+            addToast('Data tidak tersedia untuk membuat laporan.', 'error');
+            return;
+        }
+        // Make sure to install: npm install xlsx
+        const data = db.leaveRequests.map(req => ({
+            'Nama Karyawan': req.employeeName,
+            'Jenis Cuti': req.leaveType,
+            'Tanggal Mulai': req.startDate,
+            'Tanggal Selesai': req.endDate,
+            'Alasan': req.reason,
+            'Status': req.status,
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Laporan Cuti");
+        XLSX.writeFile(wb, "laporan_cuti.xlsx");
+        addToast('Laporan Excel berhasil diunduh.', 'success');
+    };
     
     return (
         <div>
@@ -1002,7 +1085,7 @@ const Reports: React.FC = () => {
                         <h3 className="font-semibold text-lg">Laporan Kehadiran Bulanan</h3>
                         <p className="text-gray-600">Unduh laporan kehadiran terperinci untuk semua karyawan pada bulan yang dipilih.</p>
                         <div className="space-x-2">
-                            <Button>Unduh PDF</Button>
+                            <Button onClick={handleDownloadPdf}>Unduh PDF</Button>
                             <Button variant="secondary" onClick={() => openEmailModal('Laporan Kehadiran')}>Kirim via Email</Button>
                         </div>
                     </div>
@@ -1010,7 +1093,7 @@ const Reports: React.FC = () => {
                         <h3 className="font-semibold text-lg">Laporan Ringkasan Cuti</h3>
                         <p className="text-gray-600">Dapatkan ringkasan semua pengajuan cuti yang disetujui, tertunda, dan ditolak.</p>
                         <div className="space-x-2">
-                            <Button>Unduh Excel</Button>
+                            <Button onClick={handleDownloadExcel}>Unduh Excel</Button>
                             <Button variant="secondary" onClick={() => openEmailModal('Laporan Cuti')}>Kirim via Email</Button>
                         </div>
                     </div>
