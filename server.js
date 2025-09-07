@@ -220,7 +220,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// POST register (REFACTORED WITH ASYNC/AWAIT)
+// POST register (REFACTORED WITH TRANSACTIONS)
 app.post('/api/register', async (req, res) => {
     const { name, email } = req.body;
     try {
@@ -238,11 +238,14 @@ app.post('/api/register', async (req, res) => {
         };
         const newUser = { id: newUserId, name, email, role: 'EMPLOYEE', employeeId: newEmployeeId };
 
+        await dbRun('BEGIN TRANSACTION');
         await dbRun('INSERT INTO employees (id, nip, position, pangkat, golongan, department, joinDate, avatarUrl, leaveBalance, isActive, address, phone, pob, dob, religion, maritalStatus, numberOfChildren, educationHistory, workHistory, trainingCertificates, payrollInfo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', Object.values(newEmployee));
         await dbRun('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser));
+        await dbRun('COMMIT');
         
         res.status(201).json({ message: 'Registration successful', userId: newUserId });
     } catch (err) {
+        await dbRun('ROLLBACK');
         console.error("Registration error:", err);
         if (!res.headersSent) {
             res.status(500).json({ error: "An internal server error occurred.", details: err.message });
@@ -251,7 +254,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 
-// POST create employee (REFACTORED WITH ASYNC/AWAIT)
+// POST create employee (REFACTORED WITH TRANSACTIONS)
 app.post('/api/employees', async (req, res) => {
     const { name, email, ...employeeData } = req.body;
     const newId = `emp-${Date.now()}`;
@@ -283,11 +286,14 @@ app.post('/api/employees', async (req, res) => {
         const empColumns = Object.keys(fullEmployeeRecord);
         const empPlaceholders = empColumns.map(() => '?').join(',');
 
+        await dbRun('BEGIN TRANSACTION');
         await dbRun(`INSERT INTO employees (${empColumns.join(',')}) VALUES (${empPlaceholders})`, Object.values(fullEmployeeRecord));
         await dbRun('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser));
+        await dbRun('COMMIT');
         
         res.status(201).json(parseJsonFields([fullEmployeeRecord])[0]);
     } catch (err) {
+        await dbRun('ROLLBACK');
         console.error("Create employee error:", err);
         if (!res.headersSent) {
             res.status(500).json({ error: "An internal server error occurred.", details: err.message });
@@ -295,11 +301,12 @@ app.post('/api/employees', async (req, res) => {
     }
 });
 
-// PUT update employee (REFACTORED WITH ASYNC/AWAIT)
+// PUT update employee (REFACTORED WITH TRANSACTIONS)
 app.put('/api/employees/:id', async (req, res) => {
     const { id } = req.params;
     const { name, email, ...employeeData } = req.body;
     try {
+        await dbRun('BEGIN TRANSACTION');
         const fieldsToUpdate = {
             ...employeeData,
             educationHistory: JSON.stringify(employeeData.educationHistory || []),
@@ -315,13 +322,17 @@ app.put('/api/employees/:id', async (req, res) => {
 
         const empResult = await dbRun(`UPDATE employees SET ${empSetClause} WHERE id = ?`, empValues);
         if (empResult.changes === 0) {
+            // No need to rollback, just means no record was found.
+            await dbRun('COMMIT');
             return res.status(404).json({ message: 'Employee not found' });
         }
         
         await dbRun(`UPDATE users SET name = ?, email = ? WHERE employeeId = ?`, [name, email, id]);
+        await dbRun('COMMIT');
         
         res.json({ message: 'Employee updated successfully' });
     } catch (err) {
+        await dbRun('ROLLBACK');
         console.error(`Update employee ${id} error:`, err);
         if (!res.headersSent) {
            res.status(500).json({ error: "An internal server error occurred.", details: err.message });
