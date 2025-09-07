@@ -19,15 +19,23 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
     initializeDb();
 });
 
-// --- Promisified DB Helper ---
+// --- Promisified DB Helpers ---
 const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
-        if (err) {
-            console.error("Database query error:", err.message);
-            reject(new Error(err.message));
-        } else {
-            resolve(rows);
-        }
+        if (err) return reject(new Error(err.message));
+        resolve(rows);
+    });
+});
+const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+        if (err) return reject(new Error(err.message));
+        resolve(row);
+    });
+});
+const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
+    db.run(sql, params, function(err) {
+        if (err) return reject(new Error(err.message));
+        resolve(this); // 'this' contains info like lastID, changes
     });
 });
 
@@ -146,8 +154,6 @@ const seedDatabase = () => {
 app.use(cors());
 app.use(express.json());
 
-// FIX: Set correct Content-Type for .tsx and .ts files
-// This middleware ensures the browser recognizes them as executable scripts, fixing the blank page issue.
 app.use((req, res, next) => {
   if (req.path.endsWith('.tsx') || req.path.endsWith('.ts')) {
     res.type('text/javascript');
@@ -159,7 +165,7 @@ app.use(express.static(path.join(__dirname, '/')));
 
 // --- API Routes ---
 
-// GET all data (REFACTORED for robustness)
+// GET all data
 app.get('/api/data', async (req, res) => {
     try {
         const tableQueries = {
@@ -190,35 +196,38 @@ app.get('/api/data', async (req, res) => {
 
 
 // GET leave requests data
-app.get('/api/leave-requests', (req, res) => {
-    db.all("SELECT * FROM leaveRequests", [], (err, rows) => {
-        if (err) return res.status(500).json({ "error": err.message });
+app.get('/api/leave-requests', async (req, res) => {
+    try {
+        const rows = await dbAll("SELECT * FROM leaveRequests");
         res.json(parseJsonFields(rows));
-    });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // POST login
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { role } = req.body;
-    db.get("SELECT * FROM users WHERE role = ?", [role], (err, user) => {
-        if (err) return res.status(500).json({ "error": err.message });
+    try {
+        const user = await dbGet("SELECT * FROM users WHERE role = ?", [role]);
         if (!user) return res.status(404).json({ message: `User with role ${role} not found` });
 
-        db.get("SELECT * FROM employees WHERE id = ?", [user.employeeId], (err, employee) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            user.employeeDetails = parseJsonFields([employee])[0];
-            res.json(user);
-        });
-    });
+        const employee = await dbGet("SELECT * FROM employees WHERE id = ?", [user.employeeId]);
+        user.employeeDetails = parseJsonFields([employee])[0];
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
-// POST register
-app.post('/api/register', (req, res) => {
+// POST register (REFACTORED WITH ASYNC/AWAIT)
+app.post('/api/register', async (req, res) => {
     const { name, email } = req.body;
-
-    db.get("SELECT * FROM users WHERE email = ?", [email], (err, row) => {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (row) return res.status(400).json({ message: 'Email already exists' });
+    try {
+        const existingUser = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email already exists' });
+        }
 
         const newEmployeeId = `emp-${Date.now()}`;
         const newUserId = `user-${Date.now()}`;
@@ -229,144 +238,149 @@ app.post('/api/register', (req, res) => {
         };
         const newUser = { id: newUserId, name, email, role: 'EMPLOYEE', employeeId: newEmployeeId };
 
-        db.run('INSERT INTO employees (id, nip, position, pangkat, golongan, department, joinDate, avatarUrl, leaveBalance, isActive, address, phone, pob, dob, religion, maritalStatus, numberOfChildren, educationHistory, workHistory, trainingCertificates, payrollInfo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', Object.values(newEmployee), function(err) {
-            if (err) return res.status(500).json({ "error": err.message });
-            
-            db.run('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser), function(err) {
-                if (err) return res.status(500).json({ "error": err.message });
-                res.status(201).json({ message: 'Registration successful', userId: newUserId });
-            });
-        });
-    });
+        await dbRun('INSERT INTO employees (id, nip, position, pangkat, golongan, department, joinDate, avatarUrl, leaveBalance, isActive, address, phone, pob, dob, religion, maritalStatus, numberOfChildren, educationHistory, workHistory, trainingCertificates, payrollInfo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', Object.values(newEmployee));
+        await dbRun('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser));
+        
+        res.status(201).json({ message: 'Registration successful', userId: newUserId });
+    } catch (err) {
+        console.error("Registration error:", err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+        }
+    }
 });
 
 
-// POST create employee
-app.post('/api/employees', (req, res) => {
+// POST create employee (REFACTORED WITH ASYNC/AWAIT)
+app.post('/api/employees', async (req, res) => {
     const { name, email, ...employeeData } = req.body;
     const newId = `emp-${Date.now()}`;
-    
-    // FIX: Stringify JSON fields and ensure all fields are present for insertion.
-    const fullEmployeeRecord = {
-        id: newId,
-        nip: employeeData.nip || `NIP${Date.now().toString().slice(-4)}`,
-        position: employeeData.position || 'N/A',
-        pangkat: employeeData.pangkat || 'N/A',
-        golongan: employeeData.golongan || 'N/A',
-        department: employeeData.department || 'N/A',
-        joinDate: employeeData.joinDate || new Date().toISOString().split('T')[0],
-        avatarUrl: employeeData.avatarUrl || 'https://picsum.photos/id/1/200',
-        leaveBalance: employeeData.leaveBalance || 12,
-        isActive: employeeData.isActive ? 1 : 0,
-        address: employeeData.address || '',
-        phone: employeeData.phone || '',
-        pob: employeeData.pob || '',
-        dob: employeeData.dob || '',
-        religion: employeeData.religion || 'Lainnya',
-        maritalStatus: employeeData.maritalStatus || 'Lajang',
-        numberOfChildren: employeeData.numberOfChildren || 0,
-        educationHistory: JSON.stringify(employeeData.educationHistory || []),
-        workHistory: JSON.stringify(employeeData.workHistory || []),
-        trainingCertificates: JSON.stringify(employeeData.trainingCertificates || []),
-        payrollInfo: JSON.stringify(employeeData.payrollInfo || {}),
-    };
+    try {
+        const fullEmployeeRecord = {
+            id: newId,
+            nip: employeeData.nip || `NIP${Date.now().toString().slice(-4)}`,
+            position: employeeData.position || 'N/A',
+            pangkat: employeeData.pangkat || 'N/A',
+            golongan: employeeData.golongan || 'N/A',
+            department: employeeData.department || 'N/A',
+            joinDate: employeeData.joinDate || new Date().toISOString().split('T')[0],
+            avatarUrl: employeeData.avatarUrl || 'https://picsum.photos/id/1/200',
+            leaveBalance: employeeData.leaveBalance ?? 12,
+            isActive: employeeData.hasOwnProperty('isActive') ? (employeeData.isActive ? 1 : 0) : 1,
+            address: employeeData.address || '',
+            phone: employeeData.phone || '',
+            pob: employeeData.pob || '',
+            dob: employeeData.dob || '',
+            religion: employeeData.religion || 'Lainnya',
+            maritalStatus: employeeData.maritalStatus || 'Lajang',
+            numberOfChildren: employeeData.numberOfChildren ?? 0,
+            educationHistory: JSON.stringify(employeeData.educationHistory || []),
+            workHistory: JSON.stringify(employeeData.workHistory || []),
+            trainingCertificates: JSON.stringify(employeeData.trainingCertificates || []),
+            payrollInfo: JSON.stringify(employeeData.payrollInfo || { baseSalary: 0, incomes: [], deductions: [] }),
+        };
+        const newUser = { id: `user-${Date.now()}`, name, email, role: 'EMPLOYEE', employeeId: newId };
+        const empColumns = Object.keys(fullEmployeeRecord);
+        const empPlaceholders = empColumns.map(() => '?').join(',');
 
-    const newUser = { id: `user-${Date.now()}`, name, email, role: 'EMPLOYEE', employeeId: newId };
-    
-    const empColumns = Object.keys(fullEmployeeRecord);
-    const empPlaceholders = empColumns.map(() => '?').join(',');
-    
-    db.run(`INSERT INTO employees (${empColumns.join(',')}) VALUES (${empPlaceholders})`, Object.values(fullEmployeeRecord), function(err) {
-        if (err) return res.status(500).json({ error: err.message });
+        await dbRun(`INSERT INTO employees (${empColumns.join(',')}) VALUES (${empPlaceholders})`, Object.values(fullEmployeeRecord));
+        await dbRun('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser));
         
-        db.run('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser), function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            // Respond with the parsed version of the created record
-            res.status(201).json(parseJsonFields([fullEmployeeRecord])[0]);
-        });
-    });
+        res.status(201).json(parseJsonFields([fullEmployeeRecord])[0]);
+    } catch (err) {
+        console.error("Create employee error:", err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+        }
+    }
 });
 
-// PUT update employee
-app.put('/api/employees/:id', (req, res) => {
+// PUT update employee (REFACTORED WITH ASYNC/AWAIT)
+app.put('/api/employees/:id', async (req, res) => {
     const { id } = req.params;
     const { name, email, ...employeeData } = req.body;
-    
-    // FIX: Stringify JSON fields before updating
-    const fieldsToUpdate = {
-        ...employeeData,
-        educationHistory: JSON.stringify(employeeData.educationHistory || []),
-        workHistory: JSON.stringify(employeeData.workHistory || []),
-        trainingCertificates: JSON.stringify(employeeData.trainingCertificates || []),
-        payrollInfo: JSON.stringify(employeeData.payrollInfo || {}),
-        isActive: employeeData.isActive ? 1 : 0
-    };
-    
-    delete fieldsToUpdate.id; // Don't try to update the ID
+    try {
+        const fieldsToUpdate = {
+            ...employeeData,
+            educationHistory: JSON.stringify(employeeData.educationHistory || []),
+            workHistory: JSON.stringify(employeeData.workHistory || []),
+            trainingCertificates: JSON.stringify(employeeData.trainingCertificates || []),
+            payrollInfo: JSON.stringify(employeeData.payrollInfo || {}),
+            isActive: employeeData.hasOwnProperty('isActive') ? (employeeData.isActive ? 1 : 0) : 1
+        };
+        delete fieldsToUpdate.id; // Prevent updating the primary key
 
-    const empSetClause = Object.keys(fieldsToUpdate).map(key => `${key} = ?`).join(', ');
-    const empValues = [...Object.values(fieldsToUpdate), id];
+        const empSetClause = Object.keys(fieldsToUpdate).map(key => `${key} = ?`).join(', ');
+        const empValues = [...Object.values(fieldsToUpdate), id];
 
-    db.run(`UPDATE employees SET ${empSetClause} WHERE id = ?`, empValues, function(err) {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (this.changes === 0) return res.status(404).json({ message: 'Employee not found' });
+        const empResult = await dbRun(`UPDATE employees SET ${empSetClause} WHERE id = ?`, empValues);
+        if (empResult.changes === 0) {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
         
-        db.run(`UPDATE users SET name = ?, email = ? WHERE employeeId = ?`, [name, email, id], function(err) {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.json({ message: 'Employee updated successfully' });
-        });
-    });
+        await dbRun(`UPDATE users SET name = ?, email = ? WHERE employeeId = ?`, [name, email, id]);
+        
+        res.json({ message: 'Employee updated successfully' });
+    } catch (err) {
+        console.error(`Update employee ${id} error:`, err);
+        if (!res.headersSent) {
+           res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+       }
+    }
 });
 
 
 // PUT update leave request status
-app.put('/api/leave-requests/:id', (req, res) => {
+app.put('/api/leave-requests/:id', async (req, res) => {
     const { id } = req.params;
     const { status, rejectionReason } = req.body;
-    db.run(`UPDATE leaveRequests SET status = ?, rejectionReason = ? WHERE id = ?`, [status, rejectionReason || null, id], function(err) {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (this.changes === 0) return res.status(404).json({ message: 'Leave request not found' });
+    try {
+        const result = await dbRun(`UPDATE leaveRequests SET status = ?, rejectionReason = ? WHERE id = ?`, [status, rejectionReason || null, id]);
+        if (result.changes === 0) return res.status(404).json({ message: 'Leave request not found' });
         res.json({ message: 'Leave request updated' });
-    });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // POST submit leave request
-app.post('/api/leave-requests', (req, res) => {
+app.post('/api/leave-requests', async (req, res) => {
     const newRequest = { ...req.body, id: `leave-${Date.now()}`, status: 'Menunggu' };
-    db.run('INSERT INTO leaveRequests (id, employeeId, employeeName, leaveType, startDate, endDate, reason, status) VALUES (?,?,?,?,?,?,?,?)',
-        [newRequest.id, newRequest.employeeId, newRequest.employeeName, newRequest.leaveType, newRequest.startDate, newRequest.endDate, newRequest.reason, newRequest.status],
-        (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.status(201).json(newRequest);
-        }
-    );
+    try {
+        await dbRun('INSERT INTO leaveRequests (id, employeeId, employeeName, leaveType, startDate, endDate, reason, status) VALUES (?,?,?,?,?,?,?,?)',
+            [newRequest.id, newRequest.employeeId, newRequest.employeeName, newRequest.leaveType, newRequest.startDate, newRequest.endDate, newRequest.reason, newRequest.status]
+        );
+        res.status(201).json(newRequest);
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // POST Clock In
-app.post('/api/attendance/clock-in', (req, res) => {
+app.post('/api/attendance/clock-in', async (req, res) => {
     const { employeeId, employeeName } = req.body;
     const today = new Date().toISOString().split('T')[0];
-    
-    db.get("SELECT * FROM attendance WHERE employeeId = ? AND date = ?", [employeeId, today], (err, row) => {
-        if (err) return res.status(500).json({ "error": err.message });
+    try {
+        const row = await dbGet("SELECT * FROM attendance WHERE employeeId = ? AND date = ?", [employeeId, today]);
         if (row) return res.status(400).json({ message: 'Already clocked in today.' });
 
         const clockInTime = new Date().toLocaleTimeString('en-GB');
         const isLate = clockInTime > '09:00:00';
         const newRecord = { id: `att-${Date.now()}`, employeeId, employeeName, date: today, clockIn: clockInTime, clockOut: null, status: isLate ? 'Terlambat' : 'Tepat Waktu', workDuration: null };
 
-        db.run('INSERT INTO attendance VALUES (?,?,?,?,?,?,?,?)', Object.values(newRecord));
+        await dbRun('INSERT INTO attendance VALUES (?,?,?,?,?,?,?,?)', Object.values(newRecord));
         res.status(201).json(newRecord);
-    });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // POST Clock Out
-app.post('/api/attendance/clock-out', (req, res) => {
+app.post('/api/attendance/clock-out', async (req, res) => {
     const { employeeId } = req.body;
     const today = new Date().toISOString().split('T')[0];
-
-    db.get("SELECT * FROM attendance WHERE employeeId = ? AND date = ? AND clockIn IS NOT NULL AND clockOut IS NULL", [employeeId, today], (err, rec) => {
-        if (err) return res.status(500).json({ "error": err.message });
+    try {
+        const rec = await dbGet("SELECT * FROM attendance WHERE employeeId = ? AND date = ? AND clockIn IS NOT NULL AND clockOut IS NULL", [employeeId, today]);
         if (!rec) return res.status(404).json({ message: 'No active clock-in record found for today.' });
         
         const clockOutTime = new Date().toLocaleTimeString('en-GB');
@@ -377,50 +391,57 @@ app.post('/api/attendance/clock-out', (req, res) => {
         const diffMins = Math.floor((diffMs % 3600000) / 60000);
         const workDuration = `${diffHrs}j ${diffMins}m`;
         
-        db.run("UPDATE attendance SET clockOut = ?, workDuration = ? WHERE id = ?", [clockOutTime, workDuration, rec.id]);
+        await dbRun("UPDATE attendance SET clockOut = ?, workDuration = ? WHERE id = ?", [clockOutTime, workDuration, rec.id]);
         res.json({ message: 'Clock out successful' });
-    });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 
 // POST create performance review
-app.post('/api/performance-reviews', (req, res) => {
+app.post('/api/performance-reviews', async (req, res) => {
     const reviewData = req.body;
-    const totalWeight = reviewData.kpis.reduce((sum, kpi) => sum + kpi.weight, 0) || 1;
-    const weightedScore = reviewData.kpis.reduce((sum, kpi) => sum + (kpi.score * kpi.weight), 0);
-    const overallScore = parseFloat((weightedScore / totalWeight).toFixed(2));
-    
-    const newReview = { ...reviewData, id: `pr-${Date.now()}`, overallScore, kpis: JSON.stringify(reviewData.kpis) };
+    try {
+        const totalWeight = reviewData.kpis.reduce((sum, kpi) => sum + kpi.weight, 0) || 1;
+        const weightedScore = reviewData.kpis.reduce((sum, kpi) => sum + (kpi.score * kpi.weight), 0);
+        const overallScore = parseFloat((weightedScore / totalWeight).toFixed(2));
+        
+        const newReview = { ...reviewData, id: `pr-${Date.now()}`, overallScore, kpis: JSON.stringify(reviewData.kpis) };
 
-    db.run('INSERT INTO performanceReviews (id, employeeId, employeeName, period, reviewerName, reviewDate, overallScore, status, strengths, areasForImprovement, kpis) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-        [newReview.id, newReview.employeeId, newReview.employeeName, newReview.period, newReview.reviewerName, newReview.reviewDate, newReview.overallScore, newReview.status, newReview.strengths, newReview.areasForImprovement, newReview.kpis],
-        (err) => {
-            if (err) return res.status(500).json({ "error": err.message });
-            res.status(201).json(parseJsonFields([newReview])[0]);
-        }
-    );
+        await dbRun('INSERT INTO performanceReviews (id, employeeId, employeeName, period, reviewerName, reviewDate, overallScore, status, strengths, areasForImprovement, kpis) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            [newReview.id, newReview.employeeId, newReview.employeeName, newReview.period, newReview.reviewerName, newReview.reviewDate, newReview.overallScore, newReview.status, newReview.strengths, newReview.areasForImprovement, newReview.kpis]
+        );
+        res.status(201).json(parseJsonFields([newReview])[0]);
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // PUT add employee feedback to performance review
-app.put('/api/performance-reviews/:id/feedback', (req, res) => {
+app.put('/api/performance-reviews/:id/feedback', async (req, res) => {
     const { id } = req.params;
     const { feedback } = req.body;
-    db.run(`UPDATE performanceReviews SET employeeFeedback = ? WHERE id = ?`, [feedback, id], function(err) {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (this.changes === 0) return res.status(404).json({ message: 'Review not found' });
+    try {
+        const result = await dbRun(`UPDATE performanceReviews SET employeeFeedback = ? WHERE id = ?`, [feedback, id]);
+        if (result.changes === 0) return res.status(404).json({ message: 'Review not found' });
         res.json({ message: 'Feedback submitted' });
-    });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // PUT update employee payroll info
-app.put('/api/employees/:id/payroll-info', (req, res) => {
+app.put('/api/employees/:id/payroll-info', async (req, res) => {
     const { id } = req.params;
     const payrollInfo = req.body;
-    db.run(`UPDATE employees SET payrollInfo = ? WHERE id = ?`, [JSON.stringify(payrollInfo), id], function(err) {
-        if (err) return res.status(500).json({ "error": err.message });
-        if (this.changes === 0) return res.status(404).json({ message: 'Employee not found' });
+    try {
+        const result = await dbRun(`UPDATE employees SET payrollInfo = ? WHERE id = ?`, [JSON.stringify(payrollInfo), id]);
+        if (result.changes === 0) return res.status(404).json({ message: 'Employee not found' });
         res.json({ message: 'Payroll info updated' });
-    });
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 // POST for misc requests
