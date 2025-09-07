@@ -19,6 +19,19 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
     initializeDb();
 });
 
+// --- Promisified DB Helper ---
+const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+        if (err) {
+            console.error("Database query error:", err.message);
+            reject(new Error(err.message));
+        } else {
+            resolve(rows);
+        }
+    });
+});
+
+
 // --- Helper Functions ---
 const parseJsonFields = (records) => {
     if (!records) return [];
@@ -30,7 +43,7 @@ const parseJsonFields = (records) => {
                 try {
                     newRecord[field] = JSON.parse(newRecord[field]);
                 } catch (e) {
-                    console.error(`Error parsing JSON for field ${field}:`, e);
+                    console.error(`Error parsing JSON for field ${field} in record:`, record.id, e);
                     newRecord[field] = (field.endsWith('s') || field.endsWith('History')) ? [] : {};
                 }
             }
@@ -146,22 +159,35 @@ app.use(express.static(path.join(__dirname, '/')));
 
 // --- API Routes ---
 
-// GET all data
+// GET all data (REFACTORED for robustness)
 app.get('/api/data', async (req, res) => {
     try {
-        const dbData = {};
-        const tables = ['users', 'employees', 'leaveRequests', 'payrolls', 'performanceReviews', 'attendance'];
-        for (const table of tables) {
-            const rows = await new Promise((resolve, reject) => {
-                db.all(`SELECT * FROM ${table}`, [], (err, rows) => err ? reject(err) : resolve(rows));
-            });
-            dbData[table] = parseJsonFields(rows);
-        }
+        const tableQueries = {
+            users: 'SELECT * FROM users',
+            employees: 'SELECT * FROM employees',
+            leaveRequests: 'SELECT * FROM leaveRequests',
+            payrolls: 'SELECT * FROM payrolls',
+            performanceReviews: 'SELECT * FROM performanceReviews',
+            attendance: 'SELECT * FROM attendance'
+        };
+
+        const promises = Object.entries(tableQueries).map(async ([tableName, sql]) => {
+            const rows = await dbAll(sql);
+            return [tableName, parseJsonFields(rows)];
+        });
+        
+        const results = await Promise.all(promises);
+        const dbData = Object.fromEntries(results);
+
         res.json(dbData);
     } catch (err) {
-        res.status(500).json({ "error": err.message });
+        console.error("Fatal error in /api/data endpoint:", err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+        }
     }
 });
+
 
 // GET leave requests data
 app.get('/api/leave-requests', (req, res) => {
