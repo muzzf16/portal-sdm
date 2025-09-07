@@ -154,13 +154,6 @@ const seedDatabase = () => {
 app.use(cors());
 app.use(express.json());
 
-app.use((req, res, next) => {
-  if (req.path.endsWith('.tsx') || req.path.endsWith('.ts')) {
-    res.type('text/javascript');
-  }
-  next();
-});
-
 app.use(express.static(path.join(__dirname, '/')));
 
 // --- API Routes ---
