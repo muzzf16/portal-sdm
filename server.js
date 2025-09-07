@@ -132,6 +132,16 @@ const seedDatabase = () => {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// FIX: Set correct Content-Type for .tsx and .ts files
+// This middleware ensures the browser recognizes them as executable scripts, fixing the blank page issue.
+app.use((req, res, next) => {
+  if (req.path.endsWith('.tsx') || req.path.endsWith('.ts')) {
+    res.type('text/javascript');
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, '/')));
 
 // --- API Routes ---
