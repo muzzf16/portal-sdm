@@ -29,9 +29,12 @@
   }
 }
 </script>
+<!-- Tambahkan Babel Standalone untuk kompilasi JSX/TSX di browser -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-gray-50">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <!-- Ubah tipe skrip menjadi "text/babel" agar dapat diproses oleh Babel -->
+    <script type="text/babel" data-presets="react,typescript" src="/index.tsx"></script>
 </body>
 </html>

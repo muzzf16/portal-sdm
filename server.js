@@ -201,13 +201,16 @@ app.post('/api/register', (req, res) => {
         const newEmployee = {
             id: newEmployeeId, nip: `NIP${Date.now().toString().slice(-4)}`, position: 'Staf Junior', pangkat: 'Staf', golongan: 'II/a', department: 'Belum Ditentukan', joinDate, avatarUrl: `https://picsum.photos/seed/${newEmployeeId}/200`, leaveBalance: 12, isActive: 1, address: '', phone: '', pob: '', dob: '', religion: 'Lainnya', maritalStatus: 'Lajang', numberOfChildren: 0, educationHistory: '[]', workHistory: '[]', trainingCertificates: '[]', payrollInfo: JSON.stringify({ baseSalary: 5000000, incomes: [], deductions: [] })
         };
-
         const newUser = { id: newUserId, name, email, role: 'EMPLOYEE', employeeId: newEmployeeId };
 
-        db.run('INSERT INTO employees VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', Object.values(newEmployee));
-        db.run('INSERT INTO users VALUES (?,?,?,?,?)', Object.values(newUser));
-        
-        res.status(201).json({ message: 'Registration successful', userId: newUserId });
+        db.run('INSERT INTO employees (id, nip, position, pangkat, golongan, department, joinDate, avatarUrl, leaveBalance, isActive, address, phone, pob, dob, religion, maritalStatus, numberOfChildren, educationHistory, workHistory, trainingCertificates, payrollInfo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', Object.values(newEmployee), function(err) {
+            if (err) return res.status(500).json({ "error": err.message });
+            
+            db.run('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser), function(err) {
+                if (err) return res.status(500).json({ "error": err.message });
+                res.status(201).json({ message: 'Registration successful', userId: newUserId });
+            });
+        });
     });
 });
 
@@ -216,15 +219,46 @@ app.post('/api/register', (req, res) => {
 app.post('/api/employees', (req, res) => {
     const { name, email, ...employeeData } = req.body;
     const newId = `emp-${Date.now()}`;
-    const newEmployee = { ...employeeData, id: newId, avatarUrl: 'https://picsum.photos/id/1/200', isActive: employeeData.isActive ? 1: 0 };
-    const newUser = { id: `user-${Date.now()}`, name, email, role: 'EMPLOYEE', employeeId: newId };
+    
+    // FIX: Stringify JSON fields and ensure all fields are present for insertion.
+    const fullEmployeeRecord = {
+        id: newId,
+        nip: employeeData.nip || `NIP${Date.now().toString().slice(-4)}`,
+        position: employeeData.position || 'N/A',
+        pangkat: employeeData.pangkat || 'N/A',
+        golongan: employeeData.golongan || 'N/A',
+        department: employeeData.department || 'N/A',
+        joinDate: employeeData.joinDate || new Date().toISOString().split('T')[0],
+        avatarUrl: employeeData.avatarUrl || 'https://picsum.photos/id/1/200',
+        leaveBalance: employeeData.leaveBalance || 12,
+        isActive: employeeData.isActive ? 1 : 0,
+        address: employeeData.address || '',
+        phone: employeeData.phone || '',
+        pob: employeeData.pob || '',
+        dob: employeeData.dob || '',
+        religion: employeeData.religion || 'Lainnya',
+        maritalStatus: employeeData.maritalStatus || 'Lajang',
+        numberOfChildren: employeeData.numberOfChildren || 0,
+        educationHistory: JSON.stringify(employeeData.educationHistory || []),
+        workHistory: JSON.stringify(employeeData.workHistory || []),
+        trainingCertificates: JSON.stringify(employeeData.trainingCertificates || []),
+        payrollInfo: JSON.stringify(employeeData.payrollInfo || {}),
+    };
 
-    const empPlaceholders = Object.keys(newEmployee).map(() => '?').join(',');
-    db.run(`INSERT INTO employees (${Object.keys(newEmployee).join(',')}) VALUES (${empPlaceholders})`, Object.values(newEmployee));
+    const newUser = { id: `user-${Date.now()}`, name, email, role: 'EMPLOYEE', employeeId: newId };
     
-    db.run('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', [newUser.id, newUser.name, newUser.email, newUser.role, newUser.employeeId]);
+    const empColumns = Object.keys(fullEmployeeRecord);
+    const empPlaceholders = empColumns.map(() => '?').join(',');
     
-    res.status(201).json(newEmployee);
+    db.run(`INSERT INTO employees (${empColumns.join(',')}) VALUES (${empPlaceholders})`, Object.values(fullEmployeeRecord), function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        
+        db.run('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser), function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            // Respond with the parsed version of the created record
+            res.status(201).json(parseJsonFields([fullEmployeeRecord])[0]);
+        });
+    });
 });
 
 // PUT update employee
@@ -232,6 +266,7 @@ app.put('/api/employees/:id', (req, res) => {
     const { id } = req.params;
     const { name, email, ...employeeData } = req.body;
     
+    // FIX: Stringify JSON fields before updating
     const fieldsToUpdate = {
         ...employeeData,
         educationHistory: JSON.stringify(employeeData.educationHistory || []),
@@ -241,7 +276,7 @@ app.put('/api/employees/:id', (req, res) => {
         isActive: employeeData.isActive ? 1 : 0
     };
     
-    delete fieldsToUpdate.id;
+    delete fieldsToUpdate.id; // Don't try to update the ID
 
     const empSetClause = Object.keys(fieldsToUpdate).map(key => `${key} = ?`).join(', ');
     const empValues = [...Object.values(fieldsToUpdate), id];
@@ -250,10 +285,13 @@ app.put('/api/employees/:id', (req, res) => {
         if (err) return res.status(500).json({ "error": err.message });
         if (this.changes === 0) return res.status(404).json({ message: 'Employee not found' });
         
-        db.run(`UPDATE users SET name = ?, email = ? WHERE employeeId = ?`, [name, email, id]);
-        res.json({ message: 'Employee updated successfully' });
+        db.run(`UPDATE users SET name = ?, email = ? WHERE employeeId = ?`, [name, email, id], function(err) {
+            if (err) return res.status(500).json({ "error": err.message });
+            res.json({ message: 'Employee updated successfully' });
+        });
     });
 });
+
 
 // PUT update leave request status
 app.put('/api/leave-requests/:id', (req, res) => {
