@@ -43,7 +43,7 @@ The backend serves the frontend files, making it a self-contained application.
     npm run dev --workspace=frontend
     ```
 
-The application will be accessible at `http://localhost:5173` (the default Vite port). The backend server runs on port 3000.
+The application will be accessible at `http://localhost:5173` (the default Vite port). The backend server runs on port 3333.
 
 **Testing:**
 

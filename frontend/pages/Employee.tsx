@@ -37,9 +37,33 @@ const NewPayslipAlert: React.FC<{ payslipPeriod: string; onViewClick: () => void
 };
 
 
+interface LeaveSummary {
+    initialAllotment: number;
+    nationalHolidays: number;
+    approvedLeaveTaken: number;
+    currentBalance: number;
+    calculatedRemaining: number;
+}
+
 const EmployeeDashboard: React.FC<{ latestNewPayslip: Payroll | null, setActiveView: (view: string) => void }> = ({ latestNewPayslip, setActiveView }) => {
     const { user } = useContext(AuthContext);
     const { db } = useContext(DataContext);
+    const [leaveSummary, setLeaveSummary] = useState<LeaveSummary | null>(null);
+
+    useEffect(() => {
+        const fetchLeaveSummary = async () => {
+            if (user?.employeeDetails?.id) {
+                try {
+                    const summary = await api.getLeaveSummary(user.employeeDetails.id);
+                    console.log("Leave Summary from API:", summary); // Tambahkan log ini
+                    setLeaveSummary(summary);
+                } catch (error) {
+                    console.error("Failed to fetch leave summary:", error);
+                }
+            }
+        };
+        fetchLeaveSummary();
+    }, [user?.employeeDetails?.id]);
     
     if (!db || !user) return null;
 
@@ -65,7 +89,7 @@ const EmployeeDashboard: React.FC<{ latestNewPayslip: Payroll | null, setActiveV
             )}
             <PageTitle title="Dasbor Saya" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <StatCard title="Sisa Cuti" value={`${user?.employeeDetails?.leaveBalance || 0} Hari`} icon={ICONS.leave} color="bg-blue-100 text-blue-600" />
+                <StatCard title="Sisa Cuti" value={leaveSummary ? `${leaveSummary.calculatedRemaining} hari` : 'Menghitung...'} icon={ICONS.leave} color="bg-blue-100 text-blue-600" />
                  <Card>
                     <h3 className="font-semibold text-gray-700 mb-2">Pengajuan Cuti Terakhir</h3>
                     {latestRequest ? (

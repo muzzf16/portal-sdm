@@ -73,6 +73,14 @@ const AdminDashboard: React.FC<{ pendingRequestsCount: number; setActiveView: (v
     </div>
 )};
 
+const allPositions = [
+    'Direktur Utama', 'Direktur umum/operasional', 'Komisaris Utama', 'Komisaris', 
+    'PE Pelayanan/Kabid Pelayanan', 'PE Manrisk/Kabid Manrisk', 'SPI', 'PE Umum/Kabid Umum', 
+    'Kasubid Kredit', 'Kasubid Pemasaran', 'Kasubid Dana', 'Kasubid Pelayanan', 
+    'Kasubid Pembinaan Nasabah', 'Kasubid Pelaporan', 'Kepala Kantor Kas', 'Staf Kredit', 
+    'Staf Dana', 'Staf IT/Pelaporan', 'Satpam', 'OB', 'Magang', 'Kontrak', 'Teller', 'Customer Service'
+];
+
 const EmployeeManagement: React.FC = () => {
     const { db, refreshData } = useContext(DataContext);
     const { addToast } = useToast();
@@ -144,8 +152,6 @@ const EmployeeManagement: React.FC = () => {
         });
     }, [employees, users, searchTerm, positionFilter, statusFilter]);
     
-    const allPositions = useMemo(() => [...new Set(db!.employees.map(e => e.position))], [db]);
-
     return (
         <div>
             <PageTitle title="Manajemen Karyawan">

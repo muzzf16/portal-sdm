@@ -1,4 +1,4 @@
-import { Role, User, Employee, PayrollInfo, LeaveRequest, PerformanceReview } from '../types';
+import { Role, User, Employee, PayrollInfo, LeaveRequest, PerformanceReview, DataChangeRequest } from '../types';
 
 const API_BASE_URL = '/api'; // Menggunakan proxy relatif
 
@@ -31,6 +31,14 @@ const api = {
     // --- Data Fetching ---
     getFullDatabase: () => {
         return fetch(`${API_BASE_URL}/data`).then(handleResponse);
+    },
+
+    getLeaveSummary: (employeeId: string) => {
+        return fetch(`${API_BASE_URL}/employees/${employeeId}/leave-summary`).then(handleResponse);
+    },
+
+    getPendingDataChangeRequests: (): Promise<DataChangeRequest[]> => {
+        return fetch(`${API_BASE_URL}/data-change-requests/pending`).then(handleResponse);
     },
 
     // --- Employee Management ---
@@ -110,11 +118,11 @@ const api = {
     },
 
     // --- Misc ---
-    submitDataChangeRequest: (message: string) => {
+    submitDataChangeRequest: (employeeId: string, employeeName: string, message: string) => {
          return fetch(`${API_BASE_URL}/misc/data-change-request`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message }),
+            body: JSON.stringify({ employeeId, employeeName, message }),
         }).then(handleResponse);
     },
 };
