@@ -155,7 +155,7 @@ const MyProfile: React.FC = () => {
     
     const handleRequestSubmit = async () => {
         try {
-            await api.submitDataChangeRequest(requestMessage);
+            await api.submitDataChangeRequest(requestMessage, employee.id, user.name);
             addToast("Permintaan berhasil dikirim ke HR.", 'success');
             setIsModalOpen(false);
             setRequestMessage('');

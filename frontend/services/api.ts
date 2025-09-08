@@ -118,7 +118,7 @@ const api = {
     },
 
     // --- Misc ---
-    submitDataChangeRequest: (employeeId: string, employeeName: string, message: string) => {
+    submitDataChangeRequest: (message: string, employeeId?: string, employeeName?: string) => {
          return fetch(`${API_BASE_URL}/misc/data-change-request`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

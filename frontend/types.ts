@@ -157,3 +157,12 @@ export interface AttendanceRecord {
     workDuration?: string; // e.g., "8j 15m"
     notes?: string;
 }
+
+export interface DataChangeRequest {
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    requestDate: string;
+    message: string;
+    status: 'Pending' | 'Approved' | 'Rejected';
+}

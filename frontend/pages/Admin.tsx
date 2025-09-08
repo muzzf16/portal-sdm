@@ -3,10 +3,11 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Layout } from '../components/Layout';
 import { ADMIN_NAV_LINKS, ICONS, attendanceData, GOLONGAN_OPTIONS } from '../constants';
 import { Card, StatCard, Modal, Button, Input, Select, PageTitle, Textarea } from '../components/ui';
-import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus } from '../types';
+import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus, DataChangeRequest } from '../types';
 import { DataContext } from '../context/DataContext';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { AuthContext } from '../App';
 
 // @ts-ignore
 import jsPDF from 'jspdf';
@@ -986,6 +987,7 @@ const PayrollManagement: React.FC = () => {
 const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> = ({ reportName, onClose }) => {
     const [email, setEmail] = useState('');
     const { addToast } = useToast();
+    const { user } = useContext(AuthContext);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -993,7 +995,7 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
 
         try {
             // Using a generic endpoint for simulation purposes
-            await api.submitDataChangeRequest(`Sending ${reportName} to ${email}`);
+            await api.submitDataChangeRequest(`Sending ${reportName} to ${email}`, user?.employeeDetails?.id, user?.name);
             addToast(`${reportName} berhasil dikirim ke ${email}`, 'success');
             onClose();
         } catch (error) {
