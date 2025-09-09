@@ -41,6 +41,22 @@ const api = {
         return fetch(`${API_BASE_URL}/data-change-requests/pending`).then(handleResponse);
     },
 
+    submitDataChangeRequest: (message: string, employeeId?: string, employeeName?: string) => {
+         return fetch(`${API_BASE_URL}/data-change-requests`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employeeId, employeeName, message }),
+        }).then(handleResponse);
+    },
+
+    updateDataChangeRequestStatus: (id: string, status: string) => {
+        return fetch(`${API_BASE_URL}/data-change-requests/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+        }).then(handleResponse);
+    },
+
     // --- Employee Management ---
     addEmployee: (data: Partial<Employee> & { name: string; email: string }) => {
         return fetch(`${API_BASE_URL}/employees`, {
@@ -75,12 +91,29 @@ const api = {
         }).then(handleResponse);
     },
     
-    submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'status'>) => {
-         return fetch(`${API_BASE_URL}/leave-requests`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(request),
-        }).then(handleResponse);
+    submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'status'>, file?: File) => {
+        // If there's a file, use FormData, otherwise use JSON
+        if (file) {
+            const formData = new FormData();
+            formData.append('employeeId', request.employeeId);
+            formData.append('employeeName', request.employeeName);
+            formData.append('leaveType', request.leaveType);
+            formData.append('startDate', request.startDate);
+            formData.append('endDate', request.endDate);
+            formData.append('reason', request.reason);
+            formData.append('supportingDocument', file);
+            
+            return fetch(`${API_BASE_URL}/leave-requests`, {
+                method: 'POST',
+                body: formData,
+            }).then(handleResponse);
+        } else {
+            return fetch(`${API_BASE_URL}/leave-requests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(request),
+            }).then(handleResponse);
+        }
     },
 
     // --- Attendance ---
@@ -114,15 +147,6 @@ const api = {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ feedback }),
-        }).then(handleResponse);
-    },
-
-    // --- Misc ---
-    submitDataChangeRequest: (message: string, employeeId?: string, employeeName?: string) => {
-         return fetch(`${API_BASE_URL}/misc/data-change-request`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employeeId, employeeName, message }),
         }).then(handleResponse);
     },
 };

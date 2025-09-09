@@ -8,6 +8,10 @@ import { LeaveRequest, LeaveStatus, LeaveType, Payroll, PerformanceReview, Atten
 import { DataContext } from '../context/DataContext';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
+// @ts-ignore
+import jsPDF from 'jspdf';
+// @ts-ignore
+import 'jspdf-autotable';
 
 const NewPayslipAlert: React.FC<{ payslipPeriod: string; onViewClick: () => void }> = ({ payslipPeriod, onViewClick }) => {
     const [isVisible, setIsVisible] = useState(true);
@@ -393,16 +397,20 @@ const MyLeave: React.FC = () => {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const handleApplyLeave = async (newRequestData: Omit<LeaveRequest, 'id' | 'employeeId' | 'employeeName' | 'status'>) => {
+    const handleApplyLeave = async (newRequestData: any) => {
         if(!user || !user.employeeDetails) return;
         
         try {
+            const { supportingDocument, ...requestData } = newRequestData;
+            
             const request = {
                 employeeId: user.employeeDetails.id,
                 employeeName: user.name,
-                ...newRequestData
+                ...requestData
             };
-            await api.submitLeaveRequest(request);
+            
+            // If there's a supporting document, pass it to the API call
+            await api.submitLeaveRequest(request, supportingDocument);
             addToast("Pengajuan cuti berhasil dikirim.", 'success');
             await refreshData();
             setIsModalOpen(false);
@@ -466,14 +474,37 @@ const LeaveApplicationForm: React.FC<{onClose: () => void, onSubmit: (data: any)
         endDate: '',
         reason: ''
     });
+    const [supportingDocument, setSupportingDocument] = useState<File | null>(null);
+    const [documentPreview, setDocumentPreview] = useState<string | null>(null);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setSupportingDocument(file);
+            
+            // Generate preview for image files
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setDocumentPreview(reader.result as string);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                setDocumentPreview(null);
+            }
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSubmit(formData);
+        onSubmit({
+            ...formData,
+            supportingDocument: supportingDocument
+        });
     };
 
     return (
@@ -485,6 +516,41 @@ const LeaveApplicationForm: React.FC<{onClose: () => void, onSubmit: (data: any)
                 <Input label="Tanggal Mulai" name="startDate" type="date" value={formData.startDate} onChange={handleChange} required/>
                 <Input label="Tanggal Selesai" name="endDate" type="date" value={formData.endDate} onChange={handleChange} required/>
                 <Textarea label="Alasan" name="reason" value={formData.reason} onChange={handleChange} required/>
+                
+                {/* Document upload field - only show for sick leave */}
+                {formData.leaveType === LeaveType.SICK && (
+                    <div className="border p-4 rounded-md">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Unggah Surat Keterangan Dokter
+                        </label>
+                        <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={handleFileChange}
+                            className="block w-full text-sm text-gray-500
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded-md file:border-0
+                                file:text-sm file:font-semibold
+                                file:bg-primary-600 file:text-white
+                                hover:file:bg-primary-700"
+                        />
+                        {documentPreview && (
+                            <div className="mt-2">
+                                <p className="text-sm text-gray-500 mb-1">Pratinjau dokumen:</p>
+                                <img src={documentPreview} alt="Document preview" className="max-h-40 rounded" />
+                            </div>
+                        )}
+                        {supportingDocument && (
+                            <p className="mt-2 text-sm text-gray-500">
+                                File terpilih: {supportingDocument.name}
+                            </p>
+                        )}
+                        <p className="mt-1 text-xs text-gray-500">
+                            Format yang diterima: PDF, JPG, JPEG, PNG. Maksimal 5MB.
+                        </p>
+                    </div>
+                )}
+                
                 <div className="flex justify-end pt-4">
                     <Button type="button" variant="secondary" onClick={onClose} className="mr-2">Batal</Button>
                     <Button type="submit">Kirim</Button>
@@ -652,8 +718,98 @@ const PayslipDetailModal: React.FC<{ payslip: Payroll; onClose: () => void }> = 
     const employee = user?.employeeDetails;
 
     const handleDownload = () => {
-        alert("Simulasi unduh PDF dimulai...");
-        console.log("Downloading payslip:", payslip);
+        // Create a new jsPDF instance
+        const doc = new jsPDF();
+        
+        // Set document properties
+        doc.setProperties({
+            title: `Slip Gaji - ${payslip.period}`
+        });
+        
+        // Add company header
+        doc.setFontSize(18);
+        doc.setFont("helvetica", "bold");
+        doc.text("PT. MAJU BERSAMA", 105, 20, { align: "center" });
+        
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "normal");
+        doc.text("SLIP GAJI KARYAWAN", 105, 30, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.text(`Periode: ${payslip.period}`, 105, 40, { align: "center" });
+        
+        // Add employee information
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("Informasi Karyawan:", 20, 55);
+        
+        doc.setFont("helvetica", "normal");
+        doc.text(`Nama: ${payslip.employeeName}`, 20, 65);
+        doc.text(`NIP: ${employee?.nip || '-'}`, 20, 72);
+        doc.text(`Jabatan: ${employee?.position || '-'}`, 20, 79);
+        doc.text(`Departemen: ${employee?.department || '-'}`, 20, 86);
+        
+        // Add earnings section
+        let yPos = 100;
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(0, 100, 0); // Green color
+        doc.text("PENDAPATAN", 20, yPos);
+        doc.setTextColor(0, 0, 0); // Reset to black
+        
+        yPos += 10;
+        doc.setFont("helvetica", "normal");
+        doc.text("Gaji Pokok", 25, yPos);
+        doc.text(formatCurrency(payslip.baseSalary), 180, yPos, { align: "right" });
+        
+        yPos += 7;
+        payslip.incomes.forEach(income => {
+            doc.text(income.name, 25, yPos);
+            doc.text(formatCurrency(income.amount), 180, yPos, { align: "right" });
+            yPos += 7;
+        });
+        
+        // Add total earnings
+        yPos += 5;
+        doc.line(20, yPos, 190, yPos); // Horizontal line
+        yPos += 5;
+        doc.setFont("helvetica", "bold");
+        doc.text("TOTAL PENDAPATAN", 20, yPos);
+        doc.text(formatCurrency(payslip.totalIncome), 180, yPos, { align: "right" });
+        
+        // Add deductions section
+        yPos += 15;
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(200, 0, 0); // Red color
+        doc.text("POTONGAN", 20, yPos);
+        doc.setTextColor(0, 0, 0); // Reset to black
+        
+        yPos += 10;
+        doc.setFont("helvetica", "normal");
+        payslip.deductions.forEach(deduction => {
+            doc.text(deduction.name, 25, yPos);
+            doc.text(formatCurrency(deduction.amount), 180, yPos, { align: "right" });
+            yPos += 7;
+        });
+        
+        // Add total deductions
+        yPos += 5;
+        doc.line(20, yPos, 190, yPos); // Horizontal line
+        yPos += 5;
+        doc.setFont("helvetica", "bold");
+        doc.text("TOTAL POTONGAN", 20, yPos);
+        doc.text(formatCurrency(payslip.totalDeductions), 180, yPos, { align: "right" });
+        
+        // Add net salary
+        yPos += 15;
+        doc.setFillColor(240, 240, 240);
+        doc.rect(20, yPos - 8, 170, 15, 'F'); // Background rectangle
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text("GAJI BERSIH (Take Home Pay)", 25, yPos);
+        doc.text(formatCurrency(payslip.netSalary), 180, yPos, { align: "right" });
+        
+        // Save the PDF
+        doc.save(`slip_gaji_${payslip.period.replace(/\s+/g, '_')}.pdf`);
     };
 
     return (

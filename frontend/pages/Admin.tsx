@@ -9,10 +9,8 @@ import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { AuthContext } from '../App';
 
-// @ts-ignore
 import jsPDF from 'jspdf';
-// @ts-ignore
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
 const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
@@ -42,13 +40,41 @@ const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }>
     );
 };
 
+const NewDataChangeRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
+    const [isVisible, setIsVisible] = useState(true);
 
-const AdminDashboard: React.FC<{ pendingRequestsCount: number; setActiveView: (view: string) => void }> = ({ pendingRequestsCount, setActiveView }) => {
+    if (!isVisible || count === 0) {
+        return null;
+    }
+
+    return (
+        <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-4 mb-6 rounded-md shadow-sm flex justify-between items-center" role="alert">
+            <div>
+                <p className="font-bold">Notifikasi Perubahan Data</p>
+                <p>Anda memiliki {count} permintaan perubahan data yang menunggu persetujuan.</p>
+            </div>
+            <div className="flex items-center">
+                 <Button onClick={onViewClick} className="mr-4 bg-blue-500 hover:bg-blue-600 focus:ring-blue-400 text-white text-sm">
+                    Lihat Permintaan
+                </Button>
+                <button onClick={() => setIsVisible(false)} className="text-blue-800 hover:text-blue-900 p-1 rounded-full hover:bg-blue-200">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+const AdminDashboard: React.FC<{ pendingRequestsCount: number; pendingDataChangeRequestsCount: number; setActiveView: (view: string) => void }> = ({ pendingRequestsCount, pendingDataChangeRequestsCount, setActiveView }) => {
     const { db } = useContext(DataContext);
     if (!db) return null;
     return (
     <div>
         <NewLeaveRequestAlert count={pendingRequestsCount} onViewClick={() => setActiveView('leaves')} />
+        <NewDataChangeRequestAlert count={pendingDataChangeRequestsCount} onViewClick={() => setActiveView('data-requests')} />
         <PageTitle title="Dasbor Admin" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <StatCard title="Total Karyawan" value={db.employees.length} icon={ICONS.employees} color="bg-blue-100 text-blue-600" />
@@ -120,7 +146,7 @@ const EmployeeManagement: React.FC = () => {
     const closeDetailsModal = () => {
         setIsDetailsModalOpen(false);
         setSelectedEmployeeForDetails(null);
-    };
+    }
     
     const handleSave = async (data: Partial<Employee> & { name: string; email: string }) => {
         setIsLoading(true);
@@ -264,7 +290,7 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         const list = [...(formData[field] || [])];
         list[index] = { ...list[index], [e.target.name]: e.target.value };
         setFormData({ ...formData, [field]: list as any });
-    };
+    }
     
     const handleAddItem = (field: 'educationHistory' | 'workHistory' | 'trainingCertificates') => {
         const list = [...(formData[field] || [])];
@@ -400,7 +426,30 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
     if (!employee || !user) return null;
 
     const handlePrint = () => {
-        window.print();
+        const doc = new jsPDF();
+
+        doc.text(`Detail Karyawan: ${user.name}`, 14, 20);
+
+        const employeeData = [
+            ['NIP', employee.nip],
+            ['Email', user.email],
+            ['Telepon', employee.phone],
+            ['Tanggal Bergabung', employee.joinDate],
+            ['Sisa Cuti', `${employee.leaveBalance} hari`],
+            ['Tempat, Tanggal Lahir', `${employee.pob}, ${employee.dob}`],
+            ['Agama', employee.religion],
+            ['Status Perkawinan', employee.maritalStatus],
+            ['Jumlah Anak', employee.numberOfChildren],
+            ['Alamat', employee.address],
+        ];
+
+        autoTable(doc, {
+            startY: 30,
+            head: [['Field', 'Value']],
+            body: employeeData,
+        });
+
+        doc.save(`employee-details-${employee.id}.pdf`);
     };
 
     return (
@@ -474,9 +523,11 @@ const LeaveManagement: React.FC = () => {
     const { db, refreshData } = useContext(DataContext);
     const { addToast } = useToast();
     const { leaveRequests } = db!;
+    const API_BASE_URL = 'http://localhost:2025';
     
     const [rejectionModalState, setRejectionModalState] = useState<{ isOpen: boolean, requestId: string | null }>({ isOpen: false, requestId: null });
     const [rejectionReason, setRejectionReason] = useState('');
+    const [documentModalState, setDocumentModalState] = useState<{ isOpen: boolean, documentUrl: string | null, fileName: string | null }>({ isOpen: false, documentUrl: null, fileName: null });
 
     const updateLeaveStatus = async (id: string, status: LeaveStatus, reason?: string) => {
         try {
@@ -505,6 +556,50 @@ const LeaveManagement: React.FC = () => {
         if (!rejectionModalState.requestId) return;
         updateLeaveStatus(rejectionModalState.requestId, LeaveStatus.REJECTED, rejectionReason);
         closeRejectionModal();
+    }
+    
+    const openDocumentModal = (documentUrl: string, fileName: string) => {
+        // Handle different types of URLs
+        let fullUrl = documentUrl;
+        
+        // If it's a relative path starting with /uploads, it should be served by our backend
+        if (documentUrl.startsWith('/uploads/')) {
+            fullUrl = `${API_BASE_URL}${documentUrl}`;
+        } 
+        // If it's an absolute URL, use it as is
+        else if (documentUrl.startsWith('http://') || documentUrl.startsWith('https://')) {
+            fullUrl = documentUrl;
+        }
+        // If it's a file:// URL (which is incorrect), try to convert it to a proper path
+        else if (documentUrl.startsWith('file://')) {
+            // Extract filename and construct proper URL
+            const filename = documentUrl.split('/').pop();
+            if (filename) {
+                fullUrl = `${API_BASE_URL}/uploads/${filename}`;
+            }
+        }
+        
+        setDocumentModalState({ isOpen: true, documentUrl: fullUrl, fileName });
+    };
+    
+    const closeDocumentModal = () => {
+        setDocumentModalState({ isOpen: false, documentUrl: null, fileName: null });
+    };
+    
+    const handleDownloadDocument = () => {
+        if (documentModalState.documentUrl && documentModalState.fileName) {
+            // Create a temporary link to download the file
+            const link = document.createElement('a');
+            
+            // Handle different types of URLs for download
+            let downloadUrl = documentModalState.documentUrl;
+            
+            link.href = downloadUrl;
+            link.download = documentModalState.fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     };
     
     const statusColor = (status: LeaveStatus) => {
@@ -543,7 +638,13 @@ const LeaveManagement: React.FC = () => {
                                 <td className="p-3 max-w-xs truncate" title={req.reason}>{req.reason}</td>
                                 <td className="p-3">
                                     {req.supportingDocument ? (
-                                        <a href="#" onClick={e => e.preventDefault()} className="text-primary-600 hover:underline">Lihat Dokumen</a>
+                                        <Button 
+                                            variant="secondary" 
+                                            className="text-xs"
+                                            onClick={() => openDocumentModal(req.supportingDocument!, `document_${req.id}`)}
+                                        >
+                                            Lihat Dokumen
+                                        </Button>
                                     ) : (
                                         <span className="text-gray-400">-</span>
                                     )}
@@ -576,6 +677,42 @@ const LeaveManagement: React.FC = () => {
                         <Button type="button" variant="secondary" onClick={closeRejectionModal} className="mr-2">Batal</Button>
                         <Button variant="danger" onClick={handleRejectSubmit} disabled={!rejectionReason.trim()}>Kirim Penolakan</Button>
                     </div>
+                </div>
+            </Modal>
+            <Modal isOpen={documentModalState.isOpen} onClose={closeDocumentModal} title="Dokumen Pendukung">
+                <div className="space-y-4">
+                    {documentModalState.documentUrl && (
+                        <div className="flex flex-col items-center">
+                            {documentModalState.documentUrl.toLowerCase().endsWith('.pdf') ? (
+                                // For PDF documents, show an iframe preview
+                                <iframe 
+                                    src={documentModalState.documentUrl}
+                                    className="w-full h-96"
+                                    title="Document Preview"
+                                />
+                            ) : (
+                                // For image documents or unknown types, show an image preview or generic message
+                                <>
+                                    {documentModalState.documentUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                                        <img 
+                                            src={documentModalState.documentUrl}
+                                            alt="Document Preview" 
+                                            className="max-w-full max-h-96 object-contain"
+                                        />
+                                    ) : (
+                                        <div className="text-center p-8">
+                                            <p className="mb-4">Pratinjau dokumen tidak tersedia untuk jenis file ini.</p>
+                                            <p className="text-sm text-gray-500">Klik "Unduh Dokumen" untuk melihat file.</p>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                            <div className="mt-4 flex space-x-2">
+                                <Button onClick={handleDownloadDocument}>Unduh Dokumen</Button>
+                                <Button variant="secondary" onClick={closeDocumentModal}>Tutup</Button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </Modal>
         </div>
@@ -715,7 +852,7 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
             employeeName: employee.name,
         };
         onSave(finalReview);
-    };
+    }
     
     return (
         <Modal isOpen={true} onClose={onClose} title={`Buat Penilaian Kinerja: ${employee.name}`}>
@@ -856,7 +993,7 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
     const addComponent = (type: 'incomes' | 'deductions') => {
         const newComponent: PayComponent = { id: `comp-${Date.now()}`, name: '', amount: 0 };
         setPayrollInfo({ ...payrollInfo, [type]: [...payrollInfo[type], newComponent] });
-    };
+    }
     
     const removeComponent = (index: number, type: 'incomes' | 'deductions') => {
         const components = [...payrollInfo[type]];
@@ -921,7 +1058,7 @@ const PayrollManagement: React.FC = () => {
             setSelectedEmployee({ employee, user });
             setIsModalOpen(true);
         }
-    };
+    }
     
     const closeModal = () => {
         setIsModalOpen(false);
@@ -1034,75 +1171,113 @@ const Reports: React.FC = () => {
         setIsEmailModalOpen(true);
     }
 
-    const handleDownloadPdf = () => {
+    const handleDownloadRekap = (type: 'employee' | 'attendance' | 'leave' | 'data-change' | 'payroll') => {
         if (!db) {
             addToast('Data tidak tersedia untuk membuat laporan.', 'error');
             return;
         }
-        // Make sure to install: npm install jspdf jspdf-autotable
-        const doc = new jsPDF();
-        doc.text("Laporan Kehadiran Bulanan", 14, 15);
 
-        const head = [['Nama Karyawan', 'Tanggal', 'Clock In', 'Clock Out', 'Durasi Kerja', 'Status']];
-        const body = db.attendance.map(att => [
-            att.employeeName,
-            att.date,
-            att.clockIn || '-',
-            att.clockOut || '-',
-            att.workDuration || '-',
-            att.status
-        ]);
+        let data: any[] = [];
+        let filename = 'laporan_rekap.xlsx';
 
-        (doc as any).autoTable({
-            startY: 20,
-            head: head,
-            body: body,
-        });
-
-        doc.save('laporan_kehadiran.pdf');
-        addToast('Laporan PDF berhasil diunduh.', 'success');
-    };
-
-    const handleDownloadExcel = () => {
-        if (!db) {
-            addToast('Data tidak tersedia untuk membuat laporan.', 'error');
-            return;
+        switch (type) {
+            case 'employee':
+                data = db.employees.map(e => {
+                    const user = db.users.find(u => u.employeeDetails?.id === e.id);
+                    return {
+                        'Nama': user?.name || 'N/A',
+                        'Posisi': e.position,
+                        'Departemen': e.department,
+                        'Status': e.isActive ? 'Aktif' : 'Nonaktif'
+                    };
+                });
+                filename = 'laporan_rekap_karyawan.xlsx';
+                break;
+            case 'attendance':
+                data = db.attendance.map(a => ({
+                    'Nama': a.employeeName,
+                    'Tanggal': a.date,
+                    'Clock In': a.clockIn,
+                    'Clock Out': a.clockOut,
+                    'Status': a.status
+                }));
+                filename = 'laporan_rekap_absensi.xlsx';
+                break;
+            case 'leave':
+                data = db.leaveRequests.map(lr => ({
+                    'Nama': lr.employeeName,
+                    'Jenis Cuti': lr.leaveType,
+                    'Tanggal Mulai': lr.startDate,
+                    'Tanggal Selesai': lr.endDate,
+                    'Status': lr.status
+                }));
+                filename = 'laporan_rekap_cuti.xlsx';
+                break;
+            case 'data-change':
+                data = db.dataChangeRequests.map(dcr => ({
+                    'Nama': dcr.employeeName,
+                    'Tanggal Permintaan': dcr.requestDate,
+                    'Status': dcr.status
+                }));
+                filename = 'laporan_rekap_permintaan_data.xlsx';
+                break;
+            case 'payroll':
+                data = db.employees.map(e => {
+                    const user = db.users.find(u => u.employeeDetails?.id === e.id);
+                    return {
+                        'Nama': user?.name || 'N/A',
+                        'Gaji Pokok': new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(e.payrollInfo.baseSalary)
+                    };
+                });
+                filename = 'laporan_rekap_penggajian.xlsx';
+                break;
         }
-        // Make sure to install: npm install xlsx
-        const data = db.leaveRequests.map(req => ({
-            'Nama Karyawan': req.employeeName,
-            'Jenis Cuti': req.leaveType,
-            'Tanggal Mulai': req.startDate,
-            'Tanggal Selesai': req.endDate,
-            'Alasan': req.reason,
-            'Status': req.status,
-        }));
+
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Laporan Cuti");
-        XLSX.writeFile(wb, "laporan_cuti.xlsx");
-        addToast('Laporan Excel berhasil diunduh.', 'success');
+        XLSX.utils.book_append_sheet(wb, ws, "Laporan Rekap");
+        XLSX.writeFile(wb, filename);
+        addToast(`${filename} berhasil diunduh.`, 'success');
     };
-    
+
     return (
         <div>
             <PageTitle title="Laporan" />
             <Card>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="border p-4 rounded-md space-y-4">
-                        <h3 className="font-semibold text-lg">Laporan Kehadiran Bulanan</h3>
-                        <p className="text-gray-600">Unduh laporan kehadiran terperinci untuk semua karyawan pada bulan yang dipilih.</p>
+                        <h3 className="font-semibold text-lg">Laporan Rekap Karyawan</h3>
+                        <p className="text-gray-600">Unduh rekap laporan data karyawan.</p>
                         <div className="space-x-2">
-                            <Button onClick={handleDownloadPdf}>Unduh PDF</Button>
-                            <Button variant="secondary" onClick={() => openEmailModal('Laporan Kehadiran')}>Kirim via Email</Button>
+                            <Button onClick={() => handleDownloadRekap('employee')}>Unduh Excel</Button>
                         </div>
                     </div>
                     <div className="border p-4 rounded-md space-y-4">
-                        <h3 className="font-semibold text-lg">Laporan Ringkasan Cuti</h3>
-                        <p className="text-gray-600">Dapatkan ringkasan semua pengajuan cuti yang disetujui, tertunda, dan ditolak.</p>
+                        <h3 className="font-semibold text-lg">Laporan Rekap Absensi</h3>
+                        <p className="text-gray-600">Unduh rekap laporan absensi.</p>
                         <div className="space-x-2">
-                            <Button onClick={handleDownloadExcel}>Unduh Excel</Button>
-                            <Button variant="secondary" onClick={() => openEmailModal('Laporan Cuti')}>Kirim via Email</Button>
+                            <Button onClick={() => handleDownloadRekap('attendance')}>Unduh Excel</Button>
+                        </div>
+                    </div>
+                    <div className="border p-4 rounded-md space-y-4">
+                        <h3 className="font-semibold text-lg">Laporan Rekap Pengajuan Cuti</h3>
+                        <p className="text-gray-600">Unduh rekap laporan pengajuan cuti.</p>
+                        <div className="space-x-2">
+                            <Button onClick={() => handleDownloadRekap('leave')}>Unduh Excel</Button>
+                        </div>
+                    </div>
+                    <div className="border p-4 rounded-md space-y-4">
+                        <h3 className="font-semibold text-lg">Laporan Rekap Permintaan Data</h3>
+                        <p className="text-gray-600">Unduh rekap laporan permintaan data.</p>
+                        <div className="space-x-2">
+                            <Button onClick={() => handleDownloadRekap('data-change')}>Unduh Excel</Button>
+                        </div>
+                    </div>
+                    <div className="border p-4 rounded-md space-y-4">
+                        <h3 className="font-semibold text-lg">Laporan Rekap Penggajian</h3>
+                        <p className="text-gray-600">Unduh rekap laporan penggajian.</p>
+                        <div className="space-x-2">
+                            <Button onClick={() => handleDownloadRekap('payroll')}>Unduh Excel</Button>
                         </div>
                     </div>
                 </div>
@@ -1117,6 +1292,115 @@ const Reports: React.FC = () => {
     );
 }
 
+const DataChangeRequests: React.FC = () => {
+    const { db, refreshData } = useContext(DataContext);
+    const { addToast } = useToast();
+    const [selectedRequest, setSelectedRequest] = useState<DataChangeRequest | null>(null);
+    const [actionModalState, setActionModalState] = useState<{ isOpen: boolean, requestId: string | null, action: 'approve' | 'reject' | null }>({ isOpen: false, requestId: null, action: null });
+    const [rejectionReason, setRejectionReason] = useState('');
+
+    const handleApprove = (id: string) => {
+        setActionModalState({ isOpen: true, requestId: id, action: 'approve' });
+    };
+
+    const handleReject = (id: string) => {
+        setActionModalState({ isOpen: true, requestId: id, action: 'reject' });
+    };
+
+    const closeActionModal = () => {
+        setActionModalState({ isOpen: false, requestId: null, action: null });
+        setRejectionReason('');
+    };
+
+    const handleActionSubmit = async () => {
+        if (!actionModalState.requestId) return;
+        
+        try {
+            const status = actionModalState.action === 'approve' ? 'approved' : 'rejected';
+            await api.updateDataChangeRequestStatus(actionModalState.requestId, status);
+            addToast(`Permintaan berhasil ${status === 'approved' ? 'disetujui' : 'ditolak'}`, 'success');
+            await refreshData();
+            closeActionModal();
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Gagal memperbarui status permintaan', 'error');
+        }
+    };
+
+    const statusColor = (status: string) => {
+        switch(status) {
+            case 'pending': return 'bg-yellow-100 text-yellow-800';
+            case 'approved': return 'bg-green-100 text-green-800';
+            case 'rejected': return 'bg-red-100 text-red-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
+    return (
+        <div>
+            <PageTitle title="Permintaan Perubahan Data" />
+            <Card>
+                 <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                    <thead>
+                        <tr className="bg-gray-100">
+                            <th className="p-3">Karyawan</th>
+                            <th className="p-3">Tanggal</th>
+                            <th className="p-3">Pesan</th>
+                            <th className="p-3">Status</th>
+                            <th className="p-3">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {db?.dataChangeRequests.map(req => (
+                            <tr key={req.id} className="border-b">
+                                <td className="p-3">{req.employeeName}</td>
+                                <td className="p-3">{req.requestDate}</td>
+                                <td className="p-3 max-w-xs truncate" title={req.message}>{req.message}</td>
+                                <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColor(req.status)}`}>{req.status}</span></td>
+                                <td className="p-3">
+                                    {req.status === 'pending' && (
+                                        <>
+                                            <Button variant="success" onClick={() => handleApprove(req.id)} className="mr-2 text-xs">Setujui</Button>
+                                            <Button variant="danger" onClick={() => handleReject(req.id)} className="text-xs">Tolak</Button>
+                                        </>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                </div>
+            </Card>
+            <Modal isOpen={actionModalState.isOpen} onClose={closeActionModal} title={actionModalState.action === 'approve' ? "Konfirmasi Persetujuan" : "Alasan Penolakan"}>
+                <div className="space-y-4">
+                    {actionModalState.action === 'reject' ? (
+                        <>
+                            <Textarea
+                                label="Mohon berikan alasan penolakan permintaan ini."
+                                value={rejectionReason}
+                                onChange={(e) => setRejectionReason(e.target.value)}
+                                required
+                                rows={3}
+                            />
+                            <div className="flex justify-end pt-2">
+                                <Button type="button" variant="secondary" onClick={closeActionModal} className="mr-2">Batal</Button>
+                                <Button variant="danger" onClick={handleActionSubmit} disabled={!rejectionReason.trim()}>Kirim Penolakan</Button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <p>Apakah Anda yakin ingin menyetujui permintaan perubahan data ini?</p>
+                            <div className="flex justify-end pt-2">
+                                <Button type="button" variant="secondary" onClick={closeActionModal} className="mr-2">Batal</Button>
+                                <Button variant="success" onClick={handleActionSubmit}>Konfirmasi</Button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </Modal>
+        </div>
+    );
+};
 
 export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
@@ -1125,27 +1409,32 @@ export const AdminPage: React.FC = () => {
     if (!db) return null; // or a loading spinner
 
     const pendingRequestsCount = useMemo(() => db.leaveRequests.filter(r => r.status === LeaveStatus.PENDING).length, [db.leaveRequests]);
+    const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status === 'pending').length, [db.dataChangeRequests]);
 
     const navLinksWithBadge = useMemo(() => {
         return ADMIN_NAV_LINKS.map(link => {
             if (link.view === 'leaves') {
                 return { ...link, badge: pendingRequestsCount };
             }
+            if (link.view === 'data-requests') {
+                return { ...link, badge: pendingDataChangeRequestsCount };
+            }
             return link;
         });
-    }, [pendingRequestsCount]);
+    }, [pendingRequestsCount, pendingDataChangeRequestsCount]);
 
 
     const renderContent = () => {
         switch (activeView) {
-            case 'dashboard': return <AdminDashboard pendingRequestsCount={pendingRequestsCount} setActiveView={setActiveView} />;
+            case 'dashboard': return <AdminDashboard pendingRequestsCount={pendingRequestsCount} pendingDataChangeRequestsCount={pendingDataChangeRequestsCount} setActiveView={setActiveView} />;
             case 'employees': return <EmployeeManagement />;
             case 'attendance': return <AttendanceManagement />;
             case 'leaves': return <LeaveManagement />;
+            case 'data-requests': return <DataChangeRequests />;
             case 'performance': return <PerformanceManagement />;
             case 'payroll': return <PayrollManagement />;
             case 'reports': return <Reports />;
-            default: return <AdminDashboard pendingRequestsCount={pendingRequestsCount} setActiveView={setActiveView}/>;
+            default: return <AdminDashboard pendingRequestsCount={pendingRequestsCount} pendingDataChangeRequestsCount={pendingDataChangeRequestsCount} setActiveView={setActiveView}/>;
         }
     };
 
