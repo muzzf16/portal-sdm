@@ -20,7 +20,7 @@ interface LayoutProps {
 const Sidebar: React.FC<{ navLinks: NavLink[], activeView: string, setActiveView: (view: string) => void, isSidebarOpen: boolean }> = ({ navLinks, activeView, setActiveView, isSidebarOpen }) => (
     <aside className={`bg-primary-800 text-white transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
         <div className="flex items-center justify-center h-20 border-b border-primary-700">
-            <h1 className={`text-2xl font-bold ${!isSidebarOpen && 'hidden'}`}>HRMS</h1>
+            <h3 className={`text-2xl font-bold ${!isSidebarOpen && 'hidden'}`}>HRMS</h3>
             <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 ${isSidebarOpen && 'hidden'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z" /></svg>
         </div>
         <nav className="mt-4">

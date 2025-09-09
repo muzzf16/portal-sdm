@@ -4,7 +4,7 @@ import { Layout } from '../components/Layout';
 import { ADMIN_NAV_LINKS, ICONS, attendanceData, GOLONGAN_OPTIONS } from '../constants';
 import { Card, StatCard, Modal, Button, Input, Select, PageTitle, Textarea } from '../components/ui';
 import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus, DataChangeRequest } from '../types';
-import { DataContext } from '../context/DataContext';
+import { useData } from '../context/DataContext';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { AuthContext } from '../App';
@@ -69,7 +69,7 @@ const NewDataChangeRequestAlert: React.FC<{ count: number; onViewClick: () => vo
 
 
 const AdminDashboard: React.FC<{ pendingRequestsCount: number; pendingDataChangeRequestsCount: number; setActiveView: (view: string) => void }> = ({ pendingRequestsCount, pendingDataChangeRequestsCount, setActiveView }) => {
-    const { db } = useContext(DataContext);
+    const { db } = useData();
     if (!db) return null;
     return (
     <div>
@@ -109,7 +109,7 @@ const allPositions = [
 ];
 
 const EmployeeManagement: React.FC = () => {
-    const { db, refreshData } = useContext(DataContext);
+    const { db, refreshData } = useData();
     const { addToast } = useToast();
     const { employees, users } = db!;
     
@@ -519,10 +519,10 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
 };
 
 
-const LeaveManagement: React.FC = () => {
-    const { db, refreshData } = useContext(DataContext);
-    const { addToast } = useToast();
-    const { leaveRequests } = db!;
+    const LeaveManagement: React.FC = () => {
+        const { db, refreshData } = useData();
+        const { addToast } = useToast();
+        const { leaveRequests } = db!;
     const API_BASE_URL = 'http://localhost:2025';
     
     const [rejectionModalState, setRejectionModalState] = useState<{ isOpen: boolean, requestId: string | null }>({ isOpen: false, requestId: null });
@@ -719,10 +719,59 @@ const LeaveManagement: React.FC = () => {
     );
 };
 
-const AttendanceManagement: React.FC = () => {
-    const { db } = useContext(DataContext);
-    const { attendance: records } = db!;
+    const AttendanceManagement: React.FC = () => {
+        const { db, refreshData } = useData();
+        const { addToast } = useToast();
+        const { attendance: records, users, employees } = db!;
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+                const attendanceRecords = json.map(row => {
+                    if (!row.NIP) {
+                        console.warn('Row without NIP found, skipping:', row);
+                        return null;
+                    }
+                    const employee = employees.find(emp => emp.nip === row.NIP);
+                    if (!employee) {
+                        console.warn(`Employee with NIP ${row.NIP} not found.`);
+                        return null;
+                    }
+                    return {
+                        employeeId: employee.id,
+                        employeeName: users.find(u => u.employeeDetails?.id === employee.id)?.name || 'N/A',
+                        date: row.Tanggal,
+                        clockIn: row['Jam Masuk'],
+                        clockOut: row['Jam Pulang'],
+                        status: 'Tepat Waktu', // Placeholder, can be improved
+                    };
+                }).filter(Boolean) as AttendanceRecord[];
+
+                if (attendanceRecords.length > 0) {
+                    await api.uploadAttendance(attendanceRecords);
+                    addToast('Data absensi berhasil diunggah', 'success');
+                    refreshData();
+                } else {
+                    addToast('Tidak ada data absensi yang valid untuk diunggah.', 'warning');
+                }
+            } catch (error) {
+                addToast(error instanceof Error ? error.message : 'Gagal mengunggah file', 'error');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
 
     const calculateDuration = (start: string | null, end: string | null): string => {
         if (!start || !end) return '-';
@@ -763,12 +812,18 @@ const AttendanceManagement: React.FC = () => {
     return (
         <div>
             <PageTitle title="Manajemen Absensi">
-                <Input 
-                    label=""
-                    type="date"
-                    value={selectedDate}
-                    onChange={e => setSelectedDate(e.target.value)}
-                />
+                <div className="flex items-center space-x-2">
+                    <Input 
+                        label=""
+                        type="date"
+                        value={selectedDate}
+                        onChange={e => setSelectedDate(e.target.value)}
+                    />
+                    <label htmlFor="attendance-upload" className="cursor-pointer bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700">
+                        Unggah Excel
+                    </label>
+                    <input id="attendance-upload" type="file" className="hidden" onChange={handleFileUpload} accept=".xlsx, .xls"/>
+                </div>
             </PageTitle>
             <Card>
                 <div className="overflow-x-auto">
@@ -891,10 +946,10 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
     );
 };
 
-const PerformanceManagement: React.FC = () => {
-    const { db, refreshData } = useContext(DataContext);
-    const { addToast } = useToast();
-    const { performanceReviews, employees, users } = db!;
+    const PerformanceManagement: React.FC = () => {
+        const { db, refreshData } = useData();
+        const { addToast } = useToast();
+        const { performanceReviews, employees, users } = db!;
     
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState<{id: string, name: string} | null>(null);
@@ -1044,10 +1099,10 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
     );
 };
 
-const PayrollManagement: React.FC = () => {
-    const { db, refreshData } = useContext(DataContext);
-    const { addToast } = useToast();
-    const { employees, users } = db!;
+    const PayrollManagement: React.FC = () => {
+        const { db, refreshData } = useData();
+        const { addToast } = useToast();
+        const { employees, users } = db!;
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState<{employee: Employee, user: User} | null>(null);
@@ -1160,9 +1215,9 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
     );
 };
 
-const Reports: React.FC = () => {
-    const { db } = useContext(DataContext);
-    const { addToast } = useToast();
+    const Reports: React.FC = () => {
+        const { db } = useData();
+        const { addToast } = useToast();
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
     const [selectedReport, setSelectedReport] = useState('');
 
@@ -1292,9 +1347,9 @@ const Reports: React.FC = () => {
     );
 }
 
-const DataChangeRequests: React.FC = () => {
-    const { db, refreshData } = useContext(DataContext);
-    const { addToast } = useToast();
+    const DataChangeRequests: React.FC = () => {
+        const { db, refreshData } = useData();
+        const { addToast } = useToast();
     const [selectedRequest, setSelectedRequest] = useState<DataChangeRequest | null>(null);
     const [actionModalState, setActionModalState] = useState<{ isOpen: boolean, requestId: string | null, action: 'approve' | 'reject' | null }>({ isOpen: false, requestId: null, action: null });
     const [rejectionReason, setRejectionReason] = useState('');
@@ -1402,9 +1457,260 @@ const DataChangeRequests: React.FC = () => {
     );
 };
 
+const UserManagement: React.FC = () => {
+    const { db, refreshData } = useData();
+    const { addToast } = useToast();
+    const users = db!.users;
+    
+    const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        password: '',
+        role: 'EMPLOYEE'
+    });
+    
+    const [isLoading, setIsLoading] = useState(false);
+
+    const openFormModal = (user: User | null = null) => {
+        if (user) {
+            setSelectedUser(user);
+            setFormData({
+                name: user.name,
+                email: user.email,
+                password: '',
+                role: user.role
+            });
+        } else {
+            setSelectedUser(null);
+            setFormData({
+                name: '',
+                email: '',
+                password: '',
+                role: 'EMPLOYEE'
+            });
+        }
+        setIsFormModalOpen(true);
+    };
+
+    const closeFormModal = () => {
+        setIsFormModalOpen(false);
+        setSelectedUser(null);
+    };
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        
+        try {
+            if (selectedUser) {
+                // Update existing user
+                await api.updateUser(selectedUser.id, {
+                    name: formData.name,
+                    email: formData.email,
+                    role: formData.role
+                });
+                addToast('Pengguna berhasil diperbarui', 'success');
+            } else {
+                // Create new user
+                if (!formData.password) {
+                    addToast('Kata sandi harus diisi untuk pengguna baru', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+                
+                await api.createUser({
+                    name: formData.name,
+                    email: formData.email,
+                    password: formData.password,
+                    role: formData.role
+                });
+                addToast('Pengguna baru berhasil ditambahkan', 'success');
+            }
+            
+            await refreshData();
+            closeFormModal();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Gagal menyimpan data pengguna';
+            addToast(errorMessage, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDelete = async (userId: string, userName: string) => {
+        if (!window.confirm(`Apakah Anda yakin ingin menghapus pengguna ${userName}?`)) {
+            return;
+        }
+        
+        try {
+            await api.deleteUser(userId);
+            addToast('Pengguna berhasil dihapus', 'success');
+            await refreshData();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Gagal menghapus pengguna';
+            addToast(errorMessage, 'error');
+        }
+    };
+
+    const filteredUsers = useMemo(() => {
+        return users.filter(user => 
+            user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            user.email.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [users, searchTerm]);
+
+    return (
+        <div>
+            <PageTitle title="Manajemen Pengguna">
+                <Button onClick={() => openFormModal()}>Tambah Pengguna Baru</Button>
+            </PageTitle>
+            
+            <Card className="mb-6">
+                <Input 
+                    label="Cari Pengguna" 
+                    placeholder="Cari berdasarkan nama atau email..." 
+                    value={searchTerm} 
+                    onChange={e => setSearchTerm(e.target.value)} 
+                />
+            </Card>
+            
+            <Card>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="p-3">Nama</th>
+                                <th className="p-3">Email</th>
+                                <th className="p-3">Peran</th>
+                                <th className="p-3">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredUsers.map(user => (
+                                <tr key={user.id} className="border-b">
+                                    <td className="p-3">{user.name}</td>
+                                    <td className="p-3">{user.email}</td>
+                                    <td className="p-3">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                            user.role === 'ADMIN' 
+                                                ? 'bg-purple-100 text-purple-800' 
+                                                : 'bg-blue-100 text-blue-800'
+                                        }`}>
+                                            {user.role}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 whitespace-nowrap">
+                                        <Button 
+                                            variant="secondary" 
+                                            onClick={() => openFormModal(user)} 
+                                            className="mr-2 text-xs py-1"
+                                        >
+                                            Ubah
+                                        </Button>
+                                        <Button 
+                                            variant="danger" 
+                                            onClick={() => handleDelete(user.id, user.name)} 
+                                            className="text-xs py-1"
+                                            disabled={user.role === 'ADMIN' && users.filter(u => u.role === 'ADMIN').length <= 1}
+                                        >
+                                            Hapus
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredUsers.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="text-center p-4 text-gray-500">
+                                        Tidak ada pengguna yang ditemukan.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+            
+            {isFormModalOpen && (
+                <Modal 
+                    isOpen={true} 
+                    onClose={closeFormModal} 
+                    title={selectedUser ? "Ubah Pengguna" : "Tambah Pengguna Baru"}
+                >
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <Input
+                            label="Nama Lengkap"
+                            name="name"
+                            value={formData.name}
+                            onChange={handleInputChange}
+                            required
+                        />
+                        
+                        <Input
+                            label="Email"
+                            name="email"
+                            type="email"
+                            value={formData.email}
+                            onChange={handleInputChange}
+                            required
+                        />
+                        
+                        {!selectedUser && (
+                            <Input
+                                label="Kata Sandi"
+                                name="password"
+                                type="password"
+                                value={formData.password}
+                                onChange={handleInputChange}
+                                required={!selectedUser}
+                                placeholder="Masukkan kata sandi"
+                            />
+                        )}
+                        
+                        <Select
+                            label="Peran"
+                            name="role"
+                            value={formData.role}
+                            onChange={handleInputChange}
+                        >
+                            <option value="EMPLOYEE">Karyawan</option>
+                            <option value="ADMIN">Administrator</option>
+                        </Select>
+                        
+                        <div className="flex justify-end pt-4">
+                            <Button 
+                                type="button" 
+                                variant="secondary" 
+                                onClick={closeFormModal} 
+                                className="mr-2"
+                            >
+                                Batal
+                            </Button>
+                            <Button 
+                                type="submit" 
+                                disabled={isLoading}
+                            >
+                                {isLoading ? 'Menyimpan...' : 'Simpan'}
+                            </Button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
 export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
-    const { db } = useContext(DataContext);
+    const { db } = useData();
     
     if (!db) return null; // or a loading spinner
 
@@ -1433,6 +1739,7 @@ export const AdminPage: React.FC = () => {
             case 'data-requests': return <DataChangeRequests />;
             case 'performance': return <PerformanceManagement />;
             case 'payroll': return <PayrollManagement />;
+            case 'users': return <UserManagement />;
             case 'reports': return <Reports />;
             default: return <AdminDashboard pendingRequestsCount={pendingRequestsCount} pendingDataChangeRequestsCount={pendingDataChangeRequestsCount} setActiveView={setActiveView}/>;
         }

@@ -140,12 +140,17 @@ const initializeDb = () => {
         `, (err) => {
             if (err) return console.error("Error creating tables:", err.message);
             console.log("Tables created or already exist.");
-            seedDatabase();
         });
     });
 };
 
 const seedDatabase = () => {
+    // Check if we should skip seeding (for manual control)
+    if (process.env.SKIP_SEEDING === 'true') {
+        console.log("Skipping database seeding as requested by SKIP_SEEDING environment variable.");
+        return;
+    }
+    
     db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
         if (err) return console.error("Error checking for users:", err.message);
         
@@ -573,6 +578,31 @@ app.post('/api/attendance/clock-out', async (req, res) => {
     }
 });
 
+// POST bulk attendance
+app.post('/api/attendance/bulk', async (req, res) => {
+    const records = req.body;
+    if (!Array.isArray(records)) {
+        return res.status(400).json({ message: 'Invalid request body. Expected an array of attendance records.' });
+    }
+
+    const insertStmt = db.prepare('INSERT INTO attendance (id, employeeId, employeeName, date, clockIn, clockOut, status, workDuration) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+
+    try {
+        await dbRun('BEGIN TRANSACTION');
+        for (const rec of records) {
+            const workDuration = rec.clockIn && rec.clockOut ? calculateDuration(rec.clockIn, rec.clockOut) : null;
+            insertStmt.run(`att-${Date.now()}-${Math.random()}`, rec.employeeId, rec.employeeName, rec.date, rec.clockIn, rec.clockOut, rec.status, workDuration);
+        }
+        await dbRun('COMMIT');
+        insertStmt.finalize();
+        res.status(201).json({ message: 'Bulk attendance uploaded successfully' });
+    } catch (err) {
+        await dbRun('ROLLBACK');
+        insertStmt.finalize();
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 // POST create performance review
 app.post('/api/performance-reviews', async (req, res) => {
@@ -669,6 +699,122 @@ app.put('/api/data-change-requests/:id', async (req, res) => {
 app.post('/api/misc/:type', (req, res) => {
     console.log(`Received misc request for: ${req.params.type}`, req.body);
     res.json({ message: 'Request received and logged on server.' });
+});
+
+// TEMPORARY ENDPOINT TO CLEAR ALL SEEDED DATA
+// WARNING: This will delete all data from all tables
+app.delete('/api/clear-all-data', async (req, res) => {
+    try {
+        await dbRun('BEGIN TRANSACTION');
+        
+        // Clear all tables
+        await dbRun('DELETE FROM users');
+        await dbRun('DELETE FROM employees');
+        await dbRun('DELETE FROM leaveRequests');
+        await dbRun('DELETE FROM payrolls');
+        await dbRun('DELETE FROM performanceReviews');
+        await dbRun('DELETE FROM attendance');
+        await dbRun('DELETE FROM dataChangeRequests');
+        
+        await dbRun('COMMIT');
+        
+        console.log('All data cleared successfully');
+        res.json({ message: 'All data cleared successfully' });
+    } catch (err) {
+        await dbRun('ROLLBACK');
+        console.error('Error clearing data:', err);
+        res.status(500).json({ error: 'Failed to clear data', details: err.message });
+    }
+});
+
+// USER MANAGEMENT ENDPOINTS
+// GET all users
+app.get('/api/users', async (req, res) => {
+    try {
+        const rows = await dbAll("SELECT id, name, email, role FROM users ORDER BY name");
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+// POST create new user
+app.post('/api/users', async (req, res) => {
+    const { name, email, password, role } = req.body;
+    try {
+        // Check if user already exists
+        const existingUser = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email already exists' });
+        }
+
+        // Hash password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Create new user
+        const newUserId = `user-${Date.now()}`;
+        await dbRun('INSERT INTO users (id, name, email, password, role) VALUES (?, ?, ?, ?, ?)', 
+            [newUserId, name, email, hashedPassword, role]);
+        
+        res.status(201).json({ id: newUserId, name, email, role });
+    } catch (err) {
+        console.error("Create user error:", err);
+        res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+    }
+});
+
+// PUT update user
+app.put('/api/users/:id', async (req, res) => {
+    const { id } = req.params;
+    const { name, email, role } = req.body;
+    try {
+        // Check if email is already used by another user
+        const existingUser = await dbGet("SELECT * FROM users WHERE email = ? AND id != ?", [email, id]);
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email already exists' });
+        }
+
+        const result = await dbRun(`UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?`, 
+            [name, email, role, id]);
+        
+        if (result.changes === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        res.json({ message: 'User updated successfully' });
+    } catch (err) {
+        console.error(`Update user ${id} error:`, err);
+        res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+    }
+});
+
+// DELETE user
+app.delete('/api/users/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Check if user exists
+        const user = await dbGet("SELECT * FROM users WHERE id = ?", [id]);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Prevent deletion of the last admin user
+        if (user.role === 'ADMIN') {
+            const adminCount = await dbGet("SELECT COUNT(*) as count FROM users WHERE role = 'ADMIN'");
+            if (adminCount.count <= 1) {
+                return res.status(400).json({ message: 'Cannot delete the last admin user' });
+            }
+        }
+
+        // Delete user
+        await dbRun('DELETE FROM users WHERE id = ?', [id]);
+        
+        res.json({ message: 'User deleted successfully' });
+    } catch (err) {
+        console.error(`Delete user ${id} error:`, err);
+        res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+    }
 });
 
 // Fallback to index.html for SPA routing

@@ -1,5 +1,5 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { User, Employee, LeaveRequest, Payroll, PerformanceReview, AttendanceRecord } from '../types';
+import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
+import { User, Employee, LeaveRequest, Payroll, PerformanceReview, AttendanceRecord, DataChangeRequest } from '../types';
 import api from '../services/api';
 
 export interface MockDatabase {
@@ -9,6 +9,7 @@ export interface MockDatabase {
     payrolls: Payroll[];
     performanceReviews: PerformanceReview[];
     attendance: AttendanceRecord[];
+    dataChangeRequests: DataChangeRequest[];
 }
 
 interface DataContextType {
@@ -17,22 +18,21 @@ interface DataContextType {
     isLoading: boolean;
 }
 
-const defaultDb: MockDatabase = {
-    users: [],
-    employees: [],
-    leaveRequests: [],
-    payrolls: [],
-    performanceReviews: [],
-    attendance: []
+const DataContext = createContext<DataContextType | undefined>(undefined);
+
+export const useData = () => {
+    const context = useContext(DataContext);
+    if (context === undefined) {
+        throw new Error('useData must be used within a DataProvider');
+    }
+    return context;
 };
 
-export const DataContext = createContext<DataContextType>({
-    db: defaultDb,
-    refreshData: async () => {},
-    isLoading: true,
-});
+interface DataProviderProps {
+    children: React.ReactNode;
+}
 
-export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     const [db, setDb] = useState<MockDatabase | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -41,9 +41,6 @@ export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }
         try {
             const data = await api.getFullDatabase();
             
-            // The backend sends user objects with an `employeeId` property.
-            // We need to replace this with the full `employeeDetails` object
-            // for easier use on the frontend.
             const hydratedUsers = data.users.map((user: any) => {
                 if (user.employeeId) {
                     const employee = data.employees.find((e: Employee) => e.id === user.employeeId);
@@ -56,7 +53,6 @@ export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }
             setDb({ ...data, users: hydratedUsers });
         } catch (error) {
             console.error("Failed to fetch data from API:", error);
-            // Optionally, set an error state here to show in the UI
         } finally {
             setIsLoading(false);
         }
@@ -66,15 +62,25 @@ export const DataProvider: React.FC<{children: React.ReactNode}> = ({ children }
         fetchData();
     }, [fetchData]);
 
-    return (
-        <DataContext.Provider value={{ db, refreshData: fetchData, isLoading }}>
-            {isLoading ? (
+    const contextValue = {
+        db,
+        refreshData: fetchData,
+        isLoading
+    };
+
+    if (isLoading) {
+        return (
+            <DataContext.Provider value={contextValue}>
                 <div className="flex h-screen items-center justify-center">
                     <p className="text-lg text-gray-600">Memuat data...</p>
                 </div>
-            ) : (
-                children
-            )}
+            </DataContext.Provider>
+        );
+    }
+
+    return (
+        <DataContext.Provider value={contextValue}>
+            {children}
         </DataContext.Provider>
     );
 };

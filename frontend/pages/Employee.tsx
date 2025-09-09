@@ -5,7 +5,7 @@ import { EMPLOYEE_NAV_LINKS, ICONS, COMPANY_WORK_START_TIME } from '../constants
 import { Card, StatCard, PageTitle, Button, Modal, Select, Input, Textarea } from '../components/ui';
 import { AuthContext } from '../App';
 import { LeaveRequest, LeaveStatus, LeaveType, Payroll, PerformanceReview, AttendanceRecord, AttendanceStatus } from '../types';
-import { DataContext } from '../context/DataContext';
+import { useData } from '../context/DataContext';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 // @ts-ignore
@@ -51,7 +51,7 @@ interface LeaveSummary {
 
 const EmployeeDashboard: React.FC<{ latestNewPayslip: Payroll | null, setActiveView: (view: string) => void }> = ({ latestNewPayslip, setActiveView }) => {
     const { user } = useContext(AuthContext);
-    const { db } = useContext(DataContext);
+    const { db } = useData();
     const [leaveSummary, setLeaveSummary] = useState<LeaveSummary | null>(null);
 
     useEffect(() => {
@@ -252,7 +252,7 @@ const MyProfile: React.FC = () => {
 
 const MyAttendance: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const { db, refreshData } = useContext(DataContext);
+    const { db, refreshData } = useData();
     const { addToast } = useToast();
     const today = new Date().toISOString().split('T')[0];
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -391,7 +391,7 @@ const MyAttendance: React.FC = () => {
 
 const MyLeave: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const { db, refreshData } = useContext(DataContext);
+    const { db, refreshData } = useData();
     const { addToast } = useToast();
     const myRequests = db!.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
 
@@ -666,7 +666,7 @@ const PerformanceReviewDetailModal: React.FC<{ review: PerformanceReview; onSave
 
 const MyPerformance: React.FC = () => {
     const { user } = useContext(AuthContext);
-    const { db, refreshData } = useContext(DataContext);
+    const { db, refreshData } = useData();
     const { addToast } = useToast();
     const myReviews = db!.performanceReviews.filter(r => r.employeeId === user?.employeeDetails?.id);
 
@@ -882,7 +882,7 @@ const MyPayslips: React.FC<{ onMount: () => void }> = ({ onMount }) => {
     }, [onMount]);
 
     const { user } = useContext(AuthContext);
-    const { db } = useContext(DataContext);
+    const { db } = useData();
     const myPayslips = db!.payrolls.filter(p => p.employeeId === user?.employeeDetails?.id);
     const [selectedPayslip, setSelectedPayslip] = useState<Payroll | null>(null);
 
@@ -912,7 +912,7 @@ const MyPayslips: React.FC<{ onMount: () => void }> = ({ onMount }) => {
 export const EmployeePage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
     const { user } = useContext(AuthContext);
-    const { db } = useContext(DataContext);
+    const { db } = useData();
     const [newPayslips, setNewPayslips] = useState<Payroll[]>([]);
 
     const VIEWED_PAYSLIPS_KEY = useMemo(() => `hrms_viewed_payslips_${user?.id}`, [user?.id]);

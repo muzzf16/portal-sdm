@@ -1,4 +1,4 @@
-import { Role, User, Employee, PayrollInfo, LeaveRequest, PerformanceReview, DataChangeRequest } from '../types';
+import { Role, User, Employee, PayrollInfo, LeaveRequest, PerformanceReview, DataChangeRequest, AttendanceRecord } from '../types';
 
 const API_BASE_URL = '/api'; // Menggunakan proxy relatif
 
@@ -54,6 +54,33 @@ const api = {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status }),
+        }).then(handleResponse);
+    },
+
+    // --- User Management ---
+    getUsers: (): Promise<User[]> => {
+        return fetch(`${API_BASE_URL}/users`).then(handleResponse);
+    },
+
+    createUser: (userData: { name: string; email: string; password: string; role: string }) => {
+        return fetch(`${API_BASE_URL}/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+        }).then(handleResponse);
+    },
+
+    updateUser: (id: string, userData: { name: string; email: string; role: string }) => {
+        return fetch(`${API_BASE_URL}/users/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+        }).then(handleResponse);
+    },
+
+    deleteUser: (id: string) => {
+        return fetch(`${API_BASE_URL}/users/${id}`, {
+            method: 'DELETE',
         }).then(handleResponse);
     },
 
@@ -130,6 +157,14 @@ const api = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ employeeId }),
+        }).then(handleResponse);
+    },
+
+    uploadAttendance: (data: Partial<AttendanceRecord>[]) => {
+        return fetch(`${API_BASE_URL}/attendance/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
         }).then(handleResponse);
     },
     
