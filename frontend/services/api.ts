@@ -12,19 +12,11 @@ const handleResponse = async (response: Response) => {
 
 const api = {
     // --- Auth ---
-    login: (credentials: {email: string, password: string}): Promise<User> => {
+    login: async (credentials: { name?: string; password?: string }) => {
         return fetch(`${API_BASE_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(credentials),
-        }).then(handleResponse);
-    },
-
-    register: (data: any) => {
-         return fetch(`${API_BASE_URL}/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
         }).then(handleResponse);
     },
 

@@ -3,7 +3,6 @@ import React, { useState, createContext, useMemo, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { User, Role } from './types';
 import { LoginPage } from './pages/Login';
-import { RegisterPage } from './pages/Register';
 import { ForgotPasswordPage } from './pages/ForgotPassword';
 import { AdminPage } from './pages/Admin';
 import { EmployeePage } from './pages/Employee';
@@ -29,7 +28,17 @@ const App: React.FC = () => {
         return storedUser ? JSON.parse(storedUser) : null;
     });
 
-    const login = useCallback((userData: User) => {
+    const login = useCallback(async (userData: User) => {
+        // If the user has an employeeId but no employeeDetails, fetch the employee data
+        if (userData.employeeId && !userData.employeeDetails) {
+            try {
+                // We would need to fetch the employee data from the API here
+                // For now, we'll rely on the DataContext to provide this data
+            } catch (error) {
+                console.error("Failed to fetch employee data:", error);
+            }
+        }
+        
         localStorage.setItem('hrms_user', JSON.stringify(userData));
         setUser(userData);
     }, []);
@@ -71,7 +80,7 @@ const App: React.FC = () => {
                                     {/* Publicly accessible routes for non-authenticated users */}
                                     <Route path="/" element={<LandingPage />} />
                                     <Route path="/login" element={<LoginPage />} />
-                                    <Route path="/register" element={<RegisterPage />} />
+                                    <Route path="/register" element={<Navigate to="/login" replace />} />
                                     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                                     
                                     {/* Redirect any other path to the landing page if not logged in */}

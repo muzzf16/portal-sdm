@@ -54,24 +54,46 @@ const EmployeeDashboard: React.FC<{ latestNewPayslip: Payroll | null, setActiveV
     const { db } = useData();
     const [leaveSummary, setLeaveSummary] = useState<LeaveSummary | null>(null);
 
+    // Get employee data from the database context
+    const employee = useMemo(() => {
+        // Use employeeDetails from user object if available
+        if (user?.employeeDetails) {
+            return user.employeeDetails;
+        }
+        
+        // Fallback to looking up in employees array
+        if (!user || !user.employeeId || !db) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
+
     useEffect(() => {
         const fetchLeaveSummary = async () => {
-            if (user?.employeeDetails?.id) {
+            const employeeId = user?.employeeDetails?.id || user?.employeeId;
+            if (employeeId) {
                 try {
-                    const summary = await api.getLeaveSummary(user.employeeDetails.id);
-                    console.log("Leave Summary from API:", summary); // Tambahkan log ini
+                    const summary = await api.getLeaveSummary(employeeId);
                     setLeaveSummary(summary);
                 } catch (error) {
                     console.error("Failed to fetch leave summary:", error);
+                    // Set default values in case of error
+                    setLeaveSummary({
+                        initialAllotment: 18,
+                        nationalHolidays: 0,
+                        approvedLeaveTaken: 0,
+                        currentBalance: employee?.leaveBalance || 0,
+                        calculatedRemaining: employee?.leaveBalance || 0
+                    });
                 }
             }
         };
         fetchLeaveSummary();
-    }, [user?.employeeDetails?.id]);
+    }, [user?.employeeDetails?.id, user?.employeeId, employee?.leaveBalance]);
     
+    console.log("Dashboard - Render - DB:", db, "User:", user, "Employee:", employee, "LeaveSummary:", leaveSummary);
+
     if (!db || !user) return null;
 
-    const myRequests = db.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
+    const myRequests = db.leaveRequests.filter(r => r.employeeId === (user?.employeeDetails?.id || user?.employeeId));
     const latestRequest = myRequests.length > 0 ? myRequests.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())[0] : null;
     
     const statusColor = (status: LeaveStatus | undefined) => {
@@ -149,15 +171,31 @@ const DetailItem: React.FC<{ label: string; value: string | number | undefined }
 
 const MyProfile: React.FC = () => {
     const { user } = useContext(AuthContext);
+    const { db } = useData();
     const { addToast } = useToast();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [requestMessage, setRequestMessage] = useState('');
 
-    if (!user || !user.employeeDetails) return <p>Memuat profil...</p>;
-    
-    const employee = user.employeeDetails;
+    // Get employee data from the database context instead of user object
+    const employee = useMemo(() => {
+        // Use employeeDetails from user object if available
+        if (user?.employeeDetails) {
+            return user.employeeDetails;
+        }
+        
+        // Fallback to looking up in employees array
+        if (!user || !user.employeeId || !db) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
+
+    console.log("MyProfile - Render - User:", user, "Employee:", employee);
+
+    if (!user) return <p>Memuat profil...</p>;
+    if (!employee) return <p>Memuat data karyawan...</p>;
     
     const handleRequestSubmit = async () => {
+        if (!employee) return;
+        
         try {
             await api.submitDataChangeRequest(requestMessage, employee.id, user.name);
             addToast("Permintaan berhasil dikirim ke HR.", 'success');
@@ -178,7 +216,7 @@ const MyProfile: React.FC = () => {
                 <div className="flex flex-col md:flex-row items-start mb-6">
                     <img src={employee.avatarUrl} alt="Avatar" className="w-28 h-28 rounded-full object-cover mb-4 md:mb-0 md:mr-6 flex-shrink-0 border-4 border-gray-200" />
                     <div>
-                        <h3 className="text-2xl font-bold text-gray-800">{user.name}</h3>
+                        <h3 className="text-2xl font-bold text-gray-800">{user?.name || 'Karyawan'}</h3>
                         <p className="text-md text-gray-600">{employee.position}</p>
                         <p className="text-sm text-gray-500">{employee.department} - {employee.pangkat} ({employee.golongan})</p>
                         <span className={`mt-2 inline-block px-3 py-1 rounded-full text-sm font-semibold ${employee.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -193,7 +231,7 @@ const MyProfile: React.FC = () => {
                         <DetailItem label="Email" value={user?.email} />
                         <DetailItem label="Telepon" value={employee.phone} />
                         <DetailItem label="Tanggal Bergabung" value={employee.joinDate} />
-                        <DetailItem label="Sisa Cuti" value={`${employee.leaveBalance} hari`} />
+                        <DetailItem label="Sisa Cuti" value={`${employee?.leaveBalance || 'N/A'} hari`} />
                     </div>
                 </CollapsibleSection>
 
@@ -257,7 +295,23 @@ const MyAttendance: React.FC = () => {
     const today = new Date().toISOString().split('T')[0];
     const [currentTime, setCurrentTime] = useState(new Date());
 
-    const myAttendanceHistory = db!.attendance.filter(a => a.employeeId === user?.employeeDetails?.id);
+    // Get employee data from the database context
+    const employee = useMemo(() => {
+        // Use employeeDetails from user object if available
+        if (user?.employeeDetails) {
+            return user.employeeDetails;
+        }
+        
+        // Fallback to looking up in employees array
+        if (!user || !user.employeeId || !db) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
+
+    const myAttendanceHistory = useMemo(() => {
+        const employeeId = user?.employeeDetails?.id || user?.employeeId;
+        if (!db || !user || !employeeId) return [];
+        return db.attendance.filter(a => a.employeeId === employeeId);
+    }, [db, user]);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -267,10 +321,10 @@ const MyAttendance: React.FC = () => {
     const todaysRecord = myAttendanceHistory.find(a => a.date === today);
     
     const handleClockIn = async () => {
-        if (!user || !user.employeeDetails || todaysRecord) return;
+        if (!employee || todaysRecord) return;
         
         try {
-            await api.clockIn(user.employeeDetails.id, user.name);
+            await api.clockIn(employee.id, user.name);
             addToast(`Clock In berhasil pada ${new Date().toLocaleTimeString('en-GB')}`, 'success');
             await refreshData();
         } catch (error) {
@@ -279,10 +333,10 @@ const MyAttendance: React.FC = () => {
     };
 
     const handleClockOut = async () => {
-        if (!todaysRecord || !user.employeeDetails) return;
+        if (!todaysRecord || !employee) return;
 
         try {
-            await api.clockOut(user.employeeDetails.id);
+            await api.clockOut(employee.id);
             addToast(`Clock Out berhasil pada ${new Date().toLocaleTimeString('en-GB')}`, 'success');
             await refreshData();
         } catch (error) {
@@ -393,18 +447,35 @@ const MyLeave: React.FC = () => {
     const { user } = useContext(AuthContext);
     const { db, refreshData } = useData();
     const { addToast } = useToast();
-    const myRequests = db!.leaveRequests.filter(r => r.employeeId === user?.employeeDetails?.id);
+    
+    // Get employee data from the database context
+    const employee = useMemo(() => {
+        // Use employeeDetails from user object if available
+        if (user?.employeeDetails) {
+            return user.employeeDetails;
+        }
+        
+        // Fallback to looking up in employees array
+        if (!user || !user.employeeId || !db) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
+
+    const myRequests = useMemo(() => {
+        const employeeId = user?.employeeDetails?.id || user?.employeeId;
+        if (!db || !user || !employeeId) return [];
+        return db.leaveRequests.filter(r => r.employeeId === employeeId);
+    }, [db, user]);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const handleApplyLeave = async (newRequestData: any) => {
-        if(!user || !user.employeeDetails) return;
+        if(!employee || !user) return;
         
         try {
             const { supportingDocument, ...requestData } = newRequestData;
             
             const request = {
-                employeeId: user.employeeDetails.id,
+                employeeId: employee.id,
                 employeeName: user.name,
                 ...requestData
             };
@@ -668,7 +739,24 @@ const MyPerformance: React.FC = () => {
     const { user } = useContext(AuthContext);
     const { db, refreshData } = useData();
     const { addToast } = useToast();
-    const myReviews = db!.performanceReviews.filter(r => r.employeeId === user?.employeeDetails?.id);
+    
+    // Get employee data from the database context
+    const employee = useMemo(() => {
+        // Use employeeDetails from user object if available
+        if (user?.employeeDetails) {
+            return user.employeeDetails;
+        }
+        
+        // Fallback to looking up in employees array
+        if (!user || !user.employeeId || !db) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
+
+    const myReviews = useMemo(() => {
+        const employeeId = user?.employeeDetails?.id || user?.employeeId;
+        if (!db || !user || !employeeId) return [];
+        return db.performanceReviews.filter(r => r.employeeId === employeeId);
+    }, [db, user]);
 
     const [selectedReview, setSelectedReview] = useState<PerformanceReview | null>(null);
 
@@ -715,7 +803,19 @@ const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', { styl
 
 const PayslipDetailModal: React.FC<{ payslip: Payroll; onClose: () => void }> = ({ payslip, onClose }) => {
     const { user } = useContext(AuthContext);
-    const employee = user?.employeeDetails;
+    const { db } = useData();
+    
+    // Get employee data from the database context
+    const employee = useMemo(() => {
+        // Use employeeDetails from user object if available
+        if (user?.employeeDetails) {
+            return user.employeeDetails;
+        }
+        
+        // Fallback to looking up in employees array
+        if (!user || !user.employeeId || !db) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
 
     const handleDownload = () => {
         // Create a new jsPDF instance
@@ -883,7 +983,25 @@ const MyPayslips: React.FC<{ onMount: () => void }> = ({ onMount }) => {
 
     const { user } = useContext(AuthContext);
     const { db } = useData();
-    const myPayslips = db!.payrolls.filter(p => p.employeeId === user?.employeeDetails?.id);
+    
+    // Get employee data from the database context
+    const employee = useMemo(() => {
+        // Use employeeDetails from user object if available
+        if (user?.employeeDetails) {
+            return user.employeeDetails;
+        }
+        
+        // Fallback to looking up in employees array
+        if (!user || !user.employeeId || !db) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
+
+    const myPayslips = useMemo(() => {
+        const employeeId = user?.employeeDetails?.id || user?.employeeId;
+        if (!db || !user || !employeeId) return [];
+        return db.payrolls.filter(p => p.employeeId === employeeId);
+    }, [db, user]);
+
     const [selectedPayslip, setSelectedPayslip] = useState<Payroll | null>(null);
 
     return (
@@ -915,10 +1033,23 @@ export const EmployeePage: React.FC = () => {
     const { db } = useData();
     const [newPayslips, setNewPayslips] = useState<Payroll[]>([]);
 
+    // Get employee data from the database context
+    const employee = useMemo(() => {
+        // Use employeeDetails from user object if available
+        if (user?.employeeDetails) {
+            return user.employeeDetails;
+        }
+        
+        // Fallback to looking up in employees array
+        if (!user || !user.employeeId || !db) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
+
     const VIEWED_PAYSLIPS_KEY = useMemo(() => `hrms_viewed_payslips_${user?.id}`, [user?.id]);
 
     useEffect(() => {
-        if (!user?.employeeDetails || !VIEWED_PAYSLIPS_KEY || !db) return;
+        const employeeId = user?.employeeDetails?.id || user?.employeeId;
+        if (!employeeId || !VIEWED_PAYSLIPS_KEY || !db) return;
         
         const getFromStorage = <T,>(key: string, defaultValue: T): T => {
             try {
@@ -930,25 +1061,26 @@ export const EmployeePage: React.FC = () => {
             }
         };
 
-        const myPayslips = db.payrolls.filter(p => p.employeeId === user.employeeDetails.id);
+        const myPayslips = db.payrolls.filter(p => p.employeeId === employeeId);
         const viewedPayslips = getFromStorage<string[]>(VIEWED_PAYSLIPS_KEY, []);
         const unreadPayslips = myPayslips
             .filter(p => !viewedPayslips.includes(p.id))
             .sort((a, b) => b.id.localeCompare(a.id));
 
         setNewPayslips(unreadPayslips);
-    }, [db, user?.employeeDetails, VIEWED_PAYSLIPS_KEY]);
+    }, [db, user, VIEWED_PAYSLIPS_KEY]);
 
     const markPayslipsAsViewed = useCallback(() => {
-        if (!user?.employeeDetails || newPayslips.length === 0 || !db) return;
+        const employeeId = user?.employeeDetails?.id || user?.employeeId;
+        if (!employeeId || newPayslips.length === 0 || !db) return;
 
         const myCurrentPayslipIds = db.payrolls
-            .filter(p => p.employeeId === user.employeeDetails.id)
+            .filter(p => p.employeeId === employeeId)
             .map(p => p.id);
         
         localStorage.setItem(VIEWED_PAYSLIPS_KEY, JSON.stringify(myCurrentPayslipIds));
         setNewPayslips([]);
-    }, [db, user?.employeeDetails, VIEWED_PAYSLIPS_KEY, newPayslips.length]);
+    }, [db, user, VIEWED_PAYSLIPS_KEY, newPayslips.length]);
 
     const navLinksWithBadge = useMemo(() => {
         return EMPLOYEE_NAV_LINKS.map(link => {

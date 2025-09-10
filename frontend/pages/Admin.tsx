@@ -171,6 +171,9 @@ const EmployeeManagement: React.FC = () => {
     const filteredEmployees = useMemo(() => {
         return employees.filter(emp => {
             const user = users.find(u => u.employeeDetails?.id === emp.id);
+            // Filter out employees without corresponding users
+            if (!user) return false;
+            
             const name = user?.name || '';
             const searchMatch = searchTerm === '' || name.toLowerCase().includes(searchTerm.toLowerCase()) || emp.nip.toLowerCase().includes(searchTerm.toLowerCase());
             const positionMatch = positionFilter === 'all' || emp.position === positionFilter;
@@ -212,26 +215,29 @@ const EmployeeManagement: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredEmployees.map(emp => (
-                            <tr key={emp.id} className="border-b">
-                                <td className="p-3 flex items-center">
-                                    <img src={emp.avatarUrl} className="w-10 h-10 rounded-full object-cover mr-3" alt={emp.id}/>
-                                    {users.find(u => u.employeeDetails?.id === emp.id)?.name || 'Tidak Dikenal'}
-                                </td>
-                                <td className="p-3">{emp.nip}</td>
-                                <td className="p-3">{emp.position}</td>
-                                <td className="p-3">{emp.department}</td>
-                                <td className="p-3">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${emp.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                        {emp.isActive ? 'Aktif' : 'Nonaktif'}
-                                    </span>
-                                </td>
-                                <td className="p-3 whitespace-nowrap">
-                                    <Button onClick={() => openDetailsModal(emp)} className="mr-2 text-xs py-1">Lihat Detail</Button>
-                                    <Button variant="secondary" onClick={() => openFormModal(emp)} className="mr-2 text-xs py-1">Ubah</Button>
-                                </td>
-                            </tr>
-                        ))}
+                        {filteredEmployees.map(emp => {
+                            const user = users.find(u => u.employeeDetails?.id === emp.id);
+                            return (
+                                <tr key={emp.id} className="border-b">
+                                    <td className="p-3 flex items-center">
+                                        <img src={emp.avatarUrl} className="w-10 h-10 rounded-full object-cover mr-3" alt={emp.id}/>
+                                        {user?.name || 'Tidak Dikenal'}
+                                    </td>
+                                    <td className="p-3">{emp.nip}</td>
+                                    <td className="p-3">{emp.position}</td>
+                                    <td className="p-3">{emp.department}</td>
+                                    <td className="p-3">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${emp.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                            {emp.isActive ? 'Aktif' : 'Nonaktif'}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 whitespace-nowrap">
+                                        <Button onClick={() => openDetailsModal(emp)} className="mr-2 text-xs py-1">Lihat Detail</Button>
+                                        <Button variant="secondary" onClick={() => openFormModal(emp)} className="mr-2 text-xs py-1">Ubah</Button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
                 </div>
@@ -259,6 +265,7 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         address: employee?.address || '',
         pob: employee?.pob || '',
         dob: employee?.dob || '',
+        gender: employee?.gender || 'Laki-laki',
         religion: employee?.religion || 'Islam',
         maritalStatus: employee?.maritalStatus || 'Lajang',
         numberOfChildren: employee?.numberOfChildren ?? 0,
@@ -334,7 +341,7 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
                 <fieldset className="border p-4 rounded-md">
                     <legend className="px-2 font-semibold">Informasi Akun & Pekerjaan</legend>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input label="Nama Lengkap" name="name" value={formData.name} onChange={handleChange} required />
+                        <Input label="Nama Karyawan" name="name" value={formData.name} onChange={handleChange} required />
                         <Input label="Email" name="email" type="email" value={formData.email} onChange={handleChange} required />
                         <Input label="NIP" name="nip" value={formData.nip} onChange={handleChange} required />
                         <Input label="Posisi" name="position" value={formData.position} onChange={handleChange} required />
@@ -357,6 +364,10 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
                         <Input label="Nomor Telepon" name="phone" value={formData.phone} onChange={handleChange} required />
                         <Input label="Tempat Lahir" name="pob" value={formData.pob} onChange={handleChange} />
                         <Input label="Tanggal Lahir" name="dob" type="date" value={formData.dob} onChange={handleChange} />
+                        <Select label="Jenis Kelamin" name="gender" value={formData.gender} onChange={handleChange}>
+                            <option value="Laki-laki">Laki-laki</option>
+                            <option value="Perempuan">Perempuan</option>
+                        </Select>
                         <Select label="Agama" name="religion" value={formData.religion} onChange={handleChange}>
                             <option>Islam</option><option>Kristen</option><option>Katolik</option><option>Hindu</option><option>Buddha</option><option>Konghucu</option>
                         </Select>
@@ -437,6 +448,7 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
             ['Tanggal Bergabung', employee.joinDate],
             ['Sisa Cuti', `${employee.leaveBalance} hari`],
             ['Tempat, Tanggal Lahir', `${employee.pob}, ${employee.dob}`],
+            ['Jenis Kelamin', employee.gender],
             ['Agama', employee.religion],
             ['Status Perkawinan', employee.maritalStatus],
             ['Jumlah Anak', employee.numberOfChildren],
@@ -480,6 +492,7 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
                 <DetailSection title="Informasi Pribadi">
                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <DetailItem label="Tempat, Tanggal Lahir" value={`${employee.pob}, ${employee.dob}`} />
+                        <DetailItem label="Jenis Kelamin" value={employee.gender} />
                         <DetailItem label="Agama" value={employee.religion} />
                         <DetailItem label="Status Perkawinan" value={employee.maritalStatus} />
                         <DetailItem label="Jumlah Anak" value={employee.numberOfChildren} />
@@ -763,7 +776,7 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
                     addToast('Data absensi berhasil diunggah', 'success');
                     refreshData();
                 } else {
-                    addToast('Tidak ada data absensi yang valid untuk diunggah.', 'warning');
+                    addToast('Tidak ada data absensi yang valid untuk diunggah.', 'info');
                 }
             } catch (error) {
                 addToast(error instanceof Error ? error.message : 'Gagal mengunggah file', 'error');
@@ -999,6 +1012,9 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
                         <tbody>
                             {employees.filter(e => e.isActive).map(emp => {
                                 const user = users.find(u => u.employeeDetails?.id === emp.id);
+                                // Filter out employees without corresponding users
+                                if (!user) return null;
+                                
                                 const lastReview = performanceReviews.filter(r => r.employeeId === emp.id).sort((a,b) => new Date(b.reviewDate).getTime() - new Date(a.reviewDate).getTime())[0];
                                 return (
                                     <tr key={emp.id} className="border-b">
@@ -1015,7 +1031,7 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
                                         </td>
                                     </tr>
                                 );
-                            })}
+                            }).filter(Boolean)}
                         </tbody>
                     </table>
                 </div>
@@ -1148,6 +1164,9 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
                         <tbody>
                             {employees.map(emp => {
                                 const user = users.find(u => u.employeeDetails?.id === emp.id);
+                                // Filter out employees without corresponding users
+                                if (!user) return null;
+                                
                                 return (
                                 <tr key={emp.id} className="border-b">
                                     <td className="p-3 flex items-center">
@@ -1160,7 +1179,7 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
                                         <Button onClick={() => openModal(emp)}>Kelola Gaji</Button>
                                     </td>
                                 </tr>
-                            )})}
+                            )}).filter(Boolean)}
                         </tbody>
                     </table>
                 </div>
@@ -1239,13 +1258,16 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
             case 'employee':
                 data = db.employees.map(e => {
                     const user = db.users.find(u => u.employeeDetails?.id === e.id);
+                    // Filter out employees without corresponding users
+                    if (!user) return null;
+                    
                     return {
                         'Nama': user?.name || 'N/A',
                         'Posisi': e.position,
                         'Departemen': e.department,
                         'Status': e.isActive ? 'Aktif' : 'Nonaktif'
                     };
-                });
+                }).filter(Boolean);
                 filename = 'laporan_rekap_karyawan.xlsx';
                 break;
             case 'attendance':
@@ -1279,11 +1301,14 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
             case 'payroll':
                 data = db.employees.map(e => {
                     const user = db.users.find(u => u.employeeDetails?.id === e.id);
+                    // Filter out employees without corresponding users
+                    if (!user) return null;
+                    
                     return {
                         'Nama': user?.name || 'N/A',
                         'Gaji Pokok': new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(e.payrollInfo.baseSalary)
                     };
-                });
+                }).filter(Boolean);
                 filename = 'laporan_rekap_penggajian.xlsx';
                 break;
         }
@@ -1371,9 +1396,9 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
         if (!actionModalState.requestId) return;
         
         try {
-            const status = actionModalState.action === 'approve' ? 'approved' : 'rejected';
+            const status = actionModalState.action === 'approve' ? 'Approved' : 'Rejected';
             await api.updateDataChangeRequestStatus(actionModalState.requestId, status);
-            addToast(`Permintaan berhasil ${status === 'approved' ? 'disetujui' : 'ditolak'}`, 'success');
+            addToast(`Permintaan berhasil ${status === 'Approved' ? 'disetujui' : 'ditolak'}`, 'success');
             await refreshData();
             closeActionModal();
         } catch (error) {
@@ -1383,9 +1408,9 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
 
     const statusColor = (status: string) => {
         switch(status) {
-            case 'pending': return 'bg-yellow-100 text-yellow-800';
-            case 'approved': return 'bg-green-100 text-green-800';
-            case 'rejected': return 'bg-red-100 text-red-800';
+            case 'Pending': return 'bg-yellow-100 text-yellow-800';
+            case 'Approved': return 'bg-green-100 text-green-800';
+            case 'Rejected': return 'bg-red-100 text-red-800';
             default: return 'bg-gray-100 text-gray-800';
         }
     };
@@ -1413,7 +1438,7 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
                                 <td className="p-3 max-w-xs truncate" title={req.message}>{req.message}</td>
                                 <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColor(req.status)}`}>{req.status}</span></td>
                                 <td className="p-3">
-                                    {req.status === 'pending' && (
+                                    {req.status === 'Pending' && (
                                         <>
                                             <Button variant="success" onClick={() => handleApprove(req.id)} className="mr-2 text-xs">Setujui</Button>
                                             <Button variant="danger" onClick={() => handleReject(req.id)} className="text-xs">Tolak</Button>
@@ -1715,7 +1740,7 @@ export const AdminPage: React.FC = () => {
     if (!db) return null; // or a loading spinner
 
     const pendingRequestsCount = useMemo(() => db.leaveRequests.filter(r => r.status === LeaveStatus.PENDING).length, [db.leaveRequests]);
-    const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status === 'pending').length, [db.dataChangeRequests]);
+            const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status === 'Pending').length, [db.dataChangeRequests]);
 
     const navLinksWithBadge = useMemo(() => {
         return ADMIN_NAV_LINKS.map(link => {

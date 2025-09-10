@@ -32,6 +32,14 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
         throw err;
     }
     console.log('Connected to the SQLite database.');
+    // Enable foreign key constraints
+    db.run("PRAGMA foreign_keys = ON", (err) => {
+        if (err) {
+            console.error("Error enabling foreign key constraints:", err.message);
+        } else {
+            console.log('Foreign key constraints enabled.');
+        }
+    });
     initializeDb();
 });
 
@@ -116,11 +124,12 @@ const initializeDb = () => {
         
         // Create Tables
         db.exec(`
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, role TEXT, employeeId TEXT
-            );
             CREATE TABLE IF NOT EXISTS employees (
-                id TEXT PRIMARY KEY, nip TEXT UNIQUE, position TEXT, pangkat TEXT, golongan TEXT, department TEXT, joinDate TEXT, avatarUrl TEXT, leaveBalance INTEGER, isActive INTEGER, address TEXT, phone TEXT, pob TEXT, dob TEXT, religion TEXT, maritalStatus TEXT, numberOfChildren INTEGER, educationHistory TEXT, workHistory TEXT, trainingCertificates TEXT, payrollInfo TEXT
+                id TEXT PRIMARY KEY, nip TEXT UNIQUE, position TEXT, pangkat TEXT, golongan TEXT, department TEXT, joinDate TEXT, avatarUrl TEXT, leaveBalance INTEGER, isActive INTEGER, address TEXT, phone TEXT, pob TEXT, dob TEXT, gender TEXT, religion TEXT, maritalStatus TEXT, numberOfChildren INTEGER, educationHistory TEXT, workHistory TEXT, trainingCertificates TEXT, payrollInfo TEXT
+            );
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, role TEXT, employeeId TEXT,
+                FOREIGN KEY (employeeId) REFERENCES employees(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS leaveRequests (
                 id TEXT PRIMARY KEY, employeeId TEXT, employeeName TEXT, leaveType TEXT, startDate TEXT, endDate TEXT, reason TEXT, status TEXT, supportingDocument TEXT, rejectionReason TEXT
@@ -170,8 +179,8 @@ const seedDatabase = () => {
                     userStmt.finalize();
 
                     // Seed Employees
-                    const empStmt = db.prepare(insertStmt('employees', ['id', 'nip', 'position', 'pangkat', 'golongan', 'department', 'joinDate', 'avatarUrl', 'leaveBalance', 'isActive', 'address', 'phone', 'pob', 'dob', 'religion', 'maritalStatus', 'numberOfChildren', 'educationHistory', 'workHistory', 'trainingCertificates', 'payrollInfo']));
-                    seedData.employees.forEach(e => empStmt.run(e.id, e.nip, e.position, e.pangkat, e.golongan, e.department, e.joinDate, e.avatarUrl, e.leaveBalance, e.isActive ? 1 : 0, e.address, e.phone, e.pob, e.dob, e.religion, e.maritalStatus, e.numberOfChildren, JSON.stringify(e.educationHistory), JSON.stringify(e.workHistory), JSON.stringify(e.trainingCertificates), JSON.stringify(e.payrollInfo)));
+                    const empStmt = db.prepare(insertStmt('employees', ['id', 'nip', 'position', 'pangkat', 'golongan', 'department', 'joinDate', 'avatarUrl', 'leaveBalance', 'isActive', 'address', 'phone', 'pob', 'dob', 'gender', 'religion', 'maritalStatus', 'numberOfChildren', 'educationHistory', 'workHistory', 'trainingCertificates', 'payrollInfo']));
+                    seedData.employees.forEach(e => empStmt.run(e.id, e.nip, e.position, e.pangkat, e.golongan, e.department, e.joinDate, e.avatarUrl, e.leaveBalance, e.isActive ? 1 : 0, e.address, e.phone, e.pob, e.dob, e.gender || 'Laki-laki', e.religion, e.maritalStatus, e.numberOfChildren, JSON.stringify(e.educationHistory), JSON.stringify(e.workHistory), JSON.stringify(e.trainingCertificates), JSON.stringify(e.payrollInfo)));
                     empStmt.finalize();
                     
                     // Seed Leave Requests
@@ -196,13 +205,56 @@ const seedDatabase = () => {
                     
                     console.log("Database seeded successfully.");
                 });
+                // Run cleanup after seeding
+                cleanupOrphanedEmployees();
             } catch (seedErr) {
                 console.error("Error reading or parsing seed file:", seedErr);
             }
         } else {
             console.log("Database already contains data. Skipping seed.");
+            // Run cleanup on existing database
+            cleanupOrphanedEmployees();
         }
     });
+};
+
+// Cleanup function to remove orphaned employees (employees without corresponding users)
+const cleanupOrphanedEmployees = async () => {
+    try {
+        console.log("Starting cleanup of orphaned employees...");
+        
+        // Find employees that don't have a corresponding user
+        const orphanedEmployees = await dbAll(`
+            SELECT e.id, e.nip, e.position
+            FROM employees e
+            LEFT JOIN users u ON e.id = u.employeeId
+            WHERE u.employeeId IS NULL
+        `);
+        
+        if (orphanedEmployees.length === 0) {
+            console.log("No orphaned employees found.");
+            return;
+        }
+        
+        console.log(`Found ${orphanedEmployees.length} orphaned employees. Deleting...`);
+        
+        // Delete orphaned employees
+        await dbRun('BEGIN TRANSACTION');
+        for (const employee of orphanedEmployees) {
+            await dbRun('DELETE FROM employees WHERE id = ?', [employee.id]);
+            console.log(`Deleted orphaned employee: ${employee.nip} (${employee.id}) - ${employee.position}`);
+        }
+        await dbRun('COMMIT');
+        
+        console.log("Cleanup of orphaned employees completed successfully.");
+    } catch (error) {
+        try {
+            await dbRun('ROLLBACK');
+        } catch (rollbackError) {
+            console.error("Error during rollback:", rollbackError);
+        }
+        console.error("Error during cleanup of orphaned employees:", error);
+    }
 };
 
 // Middleware
@@ -278,7 +330,7 @@ app.get('/api/employees/:id/leave-summary', async (req, res) => {
             nationalHolidays: CUTI_BERSAMA_2024.length,
             approvedLeaveTaken: approvedLeaveTaken,
             currentBalance: employee.leaveBalance, // The actual balance stored in DB
-            calculatedRemaining: 18 - CUTI_BERSAMA_2024.length - approvedLeaveTaken,
+            calculatedRemaining: employee.leaveBalance - approvedLeaveTaken,
         };
 
         res.json(summary);
@@ -290,9 +342,9 @@ app.get('/api/employees/:id/leave-summary', async (req, res) => {
 
 // POST login with credentials
 app.post('/api/auth/login', async (req, res) => {
-    const { email, password } = req.body;
+    const { name, password } = req.body;
     try {
-        const user = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
+        const user = await dbGet("SELECT * FROM users WHERE name = ?", [name]);
         if (!user) {
             return res.status(404).json({ message: "User not found." });
         }
@@ -302,50 +354,12 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(400).json({ message: "Invalid credentials." });
         }
 
-        const employee = await dbGet("SELECT * FROM employees WHERE id = ?", [user.employeeId]);
-        user.employeeDetails = parseJsonFields([employee])[0];
-        
+        // Remove password from response
         const { password: _, ...userWithoutPassword } = user;
 
         res.json(userWithoutPassword);
     } catch (err) {
         res.status(500).json({ "error": err.message });
-    }
-});
-
-// POST register (REFACTORED WITH TRANSACTIONS)
-app.post('/api/register', async (req, res) => {
-    const { name, email, password } = req.body; // Added password
-    try {
-        const existingUser = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
-        if (existingUser) {
-            return res.status(400).json({ message: 'Email already exists' });
-        }
-
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        const newEmployeeId = `emp-${Date.now()}`;
-        const newUserId = `user-${Date.now()}`;
-        const joinDate = new Date().toISOString().split('T')[0];
-
-        const newEmployee = {
-            id: newEmployeeId, nip: `NIP${Date.now().toString().slice(-4)}`, position: 'Staf Junior', pangkat: 'Staf', golongan: 'II/a', department: 'Belum Ditentukan', joinDate, avatarUrl: `https://picsum.photos/seed/${newEmployeeId}/200`, leaveBalance: 18, isActive: 1, address: '', phone: '', pob: '', dob: '', religion: 'Lainnya', maritalStatus: 'Lajang', numberOfChildren: 0, educationHistory: '[]', workHistory: '[]', trainingCertificates: '[]', payrollInfo: JSON.stringify({ baseSalary: 5000000, incomes: [], deductions: [] })
-        };
-        const newUser = { id: newUserId, name, email, password: hashedPassword, role: 'EMPLOYEE', employeeId: newEmployeeId };
-
-        await dbRun('BEGIN TRANSACTION');
-        await dbRun('INSERT INTO employees (id, nip, position, pangkat, golongan, department, joinDate, avatarUrl, leaveBalance, isActive, address, phone, pob, dob, religion, maritalStatus, numberOfChildren, educationHistory, workHistory, trainingCertificates, payrollInfo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', Object.values(newEmployee));
-        await dbRun('INSERT INTO users (id, name, email, password, role, employeeId) VALUES (?,?,?,?,?,?)', Object.values(newUser));
-        await dbRun('COMMIT');
-        
-        res.status(201).json({ message: 'Registration successful', userId: newUserId });
-    } catch (err) {
-        await dbRun('ROLLBACK');
-        console.error("Registration error:", err);
-        if (!res.headersSent) {
-            res.status(500).json({ error: "An internal server error occurred.", details: err.message });
-        }
     }
 });
 
@@ -370,6 +384,7 @@ app.post('/api/employees', async (req, res) => {
             phone: employeeData.phone || '',
             pob: employeeData.pob || '',
             dob: employeeData.dob || '',
+            gender: employeeData.gender || 'Laki-laki',
             religion: employeeData.religion || 'Lainnya',
             maritalStatus: employeeData.maritalStatus || 'Lajang',
             numberOfChildren: employeeData.numberOfChildren ?? 0,
@@ -378,13 +393,15 @@ app.post('/api/employees', async (req, res) => {
             trainingCertificates: JSON.stringify(employeeData.trainingCertificates || []),
             payrollInfo: JSON.stringify(employeeData.payrollInfo || { baseSalary: 0, incomes: [], deductions: [] }),
         };
-        const newUser = { id: `user-${Date.now()}`, name, email, role: 'EMPLOYEE', employeeId: newId };
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash('password123', salt); // Default password
+        const newUser = { id: `user-${Date.now()}`, name, email, password: hashedPassword, role: 'EMPLOYEE', employeeId: newId };
         const empColumns = Object.keys(fullEmployeeRecord);
         const empPlaceholders = empColumns.map(() => '?').join(',');
 
         await dbRun('BEGIN TRANSACTION');
         await dbRun(`INSERT INTO employees (${empColumns.join(',')}) VALUES (${empPlaceholders})`, Object.values(fullEmployeeRecord));
-        await dbRun('INSERT INTO users (id, name, email, role, employeeId) VALUES (?,?,?,?,?)', Object.values(newUser));
+        await dbRun('INSERT INTO users (id, name, email, password, role, employeeId) VALUES (?,?,?,?,?,?)', Object.values(newUser));
         await dbRun('COMMIT');
         
         res.status(201).json(parseJsonFields([fullEmployeeRecord])[0]);

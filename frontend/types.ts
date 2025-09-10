@@ -35,6 +35,7 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  employeeId?: string;
   employeeDetails?: Employee;
 }
 
@@ -89,6 +90,7 @@ export interface Employee {
   phone: string;
   pob: string; // Place of Birth
   dob: string; // Date of Birth
+  gender: 'Laki-laki' | 'Perempuan';
   religion: string;
   maritalStatus: MaritalStatus;
   numberOfChildren: number;

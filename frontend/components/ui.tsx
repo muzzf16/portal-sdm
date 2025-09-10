@@ -89,12 +89,23 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label: string;
 }
-export const Input: React.FC<InputProps> = ({ label, id, ...props }) => (
-    <div>
-        <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-        <input id={id} {...props} className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500" />
-    </div>
-);
+export const Input: React.FC<InputProps> = ({ label, id, type, ...props }) => {
+    // Add autocomplete attribute for password fields
+    const autoCompleteValue = type === 'password' ? 'current-password' : props.autoComplete;
+    
+    return (
+        <div>
+            <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+            <input 
+                id={id} 
+                type={type} 
+                autoComplete={autoCompleteValue}
+                {...props} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500" 
+            />
+        </div>
+    );
+};
 
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
     label: string;

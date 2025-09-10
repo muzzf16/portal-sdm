@@ -10,7 +10,7 @@ export const LoginPage: React.FC = () => {
     const { addToast } = useToast();
     const navigate = useNavigate();
 
-    const [email, setEmail] = useState('');
+    const [name, setName] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -20,14 +20,14 @@ export const LoginPage: React.FC = () => {
         setIsLoading(true);
         setError('');
         try {
-            const userToLogin = await api.login({ email, password });
+            const userToLogin = await api.login({ name, password });
             if (userToLogin) {
                 login(userToLogin);
                 addToast(`Selamat datang, ${userToLogin.name}!`, 'success');
                 navigate('/'); // Redirect to dashboard after login
             }
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Login gagal. Periksa kembali email dan kata sandi Anda.';
+            const errorMessage = error instanceof Error ? error.message : 'Login gagal. Periksa kembali nama karyawan dan kata sandi Anda.';
             setError(errorMessage);
             addToast(errorMessage, 'error');
         } finally {
@@ -48,14 +48,15 @@ export const LoginPage: React.FC = () => {
                  <h2 className="text-2xl font-semibold text-center text-gray-800 mb-6">Masuk ke Akun Anda</h2>
                  <form onSubmit={handleSubmit} className="space-y-4">
                     <Input 
-                        label="Alamat Email"
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
+                        label="Nama Karyawan"
+                        id="name"
+                        name="name"
+                        type="text"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
                         required
-                        placeholder="anda@perusahaan.com"
+                        placeholder="Nama Karyawan"
+                        autoComplete="username"
                     />
                     <Input 
                         label="Kata Sandi"
@@ -79,9 +80,6 @@ export const LoginPage: React.FC = () => {
                  <div className="text-sm text-center mt-6 flex justify-between">
                     <Link to="/forgot-password" className="text-primary-600 hover:underline">
                         Lupa kata sandi?
-                    </Link>
-                    <Link to="/register" className="text-primary-600 hover:underline">
-                        Belum punya akun?
                     </Link>
                  </div>
                  <div className="text-center mt-6">
