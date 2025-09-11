@@ -1,4 +1,3 @@
-
 import React, { useState, createContext, useMemo, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { User, Role } from './types';

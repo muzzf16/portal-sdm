@@ -87,8 +87,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     if (isLoading) {
         return (
             <DataContext.Provider value={contextValue}>
-                <div className="flex h-screen items-center justify-center">
-                    <p className="text-lg text-gray-600">Memuat data...</p>
+                <div className="d-flex vh-100 align-items-center justify-content-center">
+                    <p className="text-lg text-muted">Memuat data...</p>
                 </div>
             </DataContext.Provider>
         );

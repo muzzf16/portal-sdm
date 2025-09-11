@@ -261,8 +261,8 @@ const cleanupOrphanedEmployees = async () => {
 app.use(cors());
 app.use(express.json());
 
-// Serve frontend files from the 'frontend' directory
-app.use(express.static(path.join(__dirname, '../frontend')));
+// Serve frontend files from the 'frontend/dist' directory (built files)
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 // --- API Routes ---
 
@@ -595,6 +595,18 @@ app.post('/api/attendance/clock-out', async (req, res) => {
     }
 });
 
+const calculateDuration = (start, end) => {
+    if (!start || !end) return null;
+    // The date doesn't matter, only the time difference
+    const startTime = new Date(`1970-01-01T${start}`);
+    const endTime = new Date(`1970-01-01T${end}`);
+    const diffMs = endTime.getTime() - startTime.getTime();
+    if (diffMs < 0) return null;
+    const diffHrs = Math.floor(diffMs / 3600000);
+    const diffMins = Math.floor((diffMs % 3600000) / 60000);
+    return `${diffHrs}j ${diffMins}m`;
+};
+
 // POST bulk attendance
 app.post('/api/attendance/bulk', async (req, res) => {
     const records = req.body;
@@ -603,16 +615,32 @@ app.post('/api/attendance/bulk', async (req, res) => {
     }
 
     const insertStmt = db.prepare('INSERT INTO attendance (id, employeeId, employeeName, date, clockIn, clockOut, status, workDuration) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const warnings = [];
 
     try {
         await dbRun('BEGIN TRANSACTION');
         for (const rec of records) {
-            const workDuration = rec.clockIn && rec.clockOut ? calculateDuration(rec.clockIn, rec.clockOut) : null;
-            insertStmt.run(`att-${Date.now()}-${Math.random()}`, rec.employeeId, rec.employeeName, rec.date, rec.clockIn, rec.clockOut, rec.status, workDuration);
+            if (!rec.employeeName) {
+                warnings.push(`Skipping record due to missing employeeName: ${JSON.stringify(rec)}`);
+                continue;
+            }
+
+            // Find user by name, case-insensitively
+            const user = await dbGet('SELECT * FROM users WHERE LOWER(name) = LOWER(?)', [rec.employeeName]);
+
+            if (!user || !user.employeeId) {
+                warnings.push(`Skipping record because employee not found for name: "${rec.employeeName}"`);
+                continue;
+            }
+
+            const workDuration = calculateDuration(rec.clockIn, rec.clockOut);
+            const employeeId = user.employeeId;
+            
+            insertStmt.run(`att-${Date.now()}-${Math.random()}`, employeeId, rec.employeeName, rec.date, rec.clockIn, rec.clockOut, rec.status, workDuration);
         }
         await dbRun('COMMIT');
         insertStmt.finalize();
-        res.status(201).json({ message: 'Bulk attendance uploaded successfully' });
+        res.status(201).json({ message: 'Bulk attendance uploaded successfully', warnings });
     } catch (err) {
         await dbRun('ROLLBACK');
         insertStmt.finalize();
@@ -837,7 +865,7 @@ app.delete('/api/users/:id', async (req, res) => {
 // Fallback to index.html for SPA routing
 app.get('*', (req, res) => {
     if (!req.originalUrl.startsWith('/api/')) {
-        res.sendFile(path.join(__dirname, '../frontend', 'index.html'));
+        res.sendFile(path.join(__dirname, '../frontend/dist', 'index.html'));
     } else {
         res.status(404).json({ message: 'API endpoint not found' });
     }
