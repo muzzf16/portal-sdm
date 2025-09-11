@@ -1,116 +1,122 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Card } from '../components/ui';
+import { Button, Card, Container, Navbar, Nav, Row, Col } from 'react-bootstrap';
 import { ICONS } from '../constants';
 
 const FeatureCard: React.FC<{ icon: React.ReactElement; title: string; description: string }> = ({ icon, title, description }) => (
-    <Card className="text-center p-8 flex flex-col items-center">
-        <div className="bg-primary-100 text-primary-600 p-4 rounded-full mb-4">
-            {/* FIX: Explicitly provide a generic type to React.cloneElement to inform TypeScript that the cloned element can accept a `className` prop. */}
-            {React.cloneElement<any>(icon, { className: "h-8 w-8" })}
+    <Card className="text-center p-4 h-100 shadow-sm">
+        <div className="feature-icon bg-primary-subtle text-primary p-3 rounded-circle mb-3 d-inline-block">
+            {icon}
         </div>
-        <h3 className="text-xl font-semibold mb-2 text-gray-800">{title}</h3>
-        <p className="text-gray-600">{description}</p>
+        <Card.Body>
+            <Card.Title as="h3" className="h5 fw-semibold mb-2">{title}</Card.Title>
+            <Card.Text className="text-muted">{description}</Card.Text>
+        </Card.Body>
     </Card>
 );
 
 export const LandingPage: React.FC = () => {
     return (
-        <div className="bg-white text-gray-800">
-            {/* Header */}
-            <header className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md shadow-sm z-50">
-                <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-                    <Link to="/" className="flex items-center space-x-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z" /></svg>
-                        <h1 className="text-2xl font-bold text-gray-800">Portal SDM</h1>
-                    </Link>
-                    <nav className="hidden md:flex items-center space-x-8">
-                        <a href="#features" className="text-gray-600 hover:text-primary-600">Fitur</a>
-                        <a href="#about" className="text-gray-600 hover:text-primary-600">Tentang Kami</a>
-                    </nav>
-                    <Link to="/login">
-                        <Button variant="primary">Masuk</Button>
-                    </Link>
-                </div>
-            </header>
+        <div className="bg-white text-dark">
+            <Navbar bg="white" expand="lg" className="shadow-sm fixed-top">
+                <Container>
+                    <Navbar.Brand as={Link} to="/" className="d-flex align-items-center">
+                        <i className="bi bi-buildings-fill text-primary fs-4 me-2"></i>
+                        <span className="h4 fw-bold text-dark mb-0">Portal SDM</span>
+                    </Navbar.Brand>
+                    <Navbar.Toggle aria-controls="basic-navbar-nav" />
+                    <Navbar.Collapse id="basic-navbar-nav">
+                        <Nav className="ms-auto align-items-center">
+                            <Nav.Link href="#features" className="me-3">Fitur</Nav.Link>
+                            <Nav.Link href="#about" className="me-3">Tentang Kami</Nav.Link>
+                            <Button as={Link as any} to="/login" variant="primary">Masuk</Button>
+                        </Nav>
+                    </Navbar.Collapse>
+                </Container>
+            </Navbar>
 
-            <main>
-                {/* Hero Section */}
-                <section className="bg-primary-50 pt-32 pb-20">
-                    <div className="container mx-auto px-6 text-center">
-                        <h2 className="text-4xl md:text-6xl font-extrabold text-primary-900 mb-4 leading-tight">
+            <main style={{ paddingTop: '70px' }}>
+                <section className="py-5" style={{ backgroundColor: 'var(--bs-primary-bg-subtle)' }}>
+                    <Container className="text-center py-5">
+                        <h1 className="display-4 fw-bold text-primary mb-3">
                             Manajemen SDM Modern di Ujung Jari Anda
-                        </h2>
-                        <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mb-8">
+                        </h1>
+                        <p className="lead text-muted mb-4">
                             Sederhanakan proses SDM, tingkatkan keterlibatan karyawan, dan fokus pada hal yang paling penting: mengembangkan tim Anda.
                         </p>
-                        <Link to="/login">
-                            <Button variant="primary" className="text-lg px-8 py-4">
-                                Masuk ke Portal
-                            </Button>
-                        </Link>
-                    </div>
+                        <Button as={Link as any} to="/login" variant="primary" size="lg">
+                            Masuk ke Portal
+                        </Button>
+                    </Container>
                 </section>
 
-                {/* Features Section */}
-                <section id="features" className="py-20">
-                    <div className="container mx-auto px-6">
-                        <div className="text-center mb-12">
-                            <h2 className="text-3xl md:text-4xl font-bold text-gray-800">Fitur Unggulan Kami</h2>
-                            <p className="text-gray-600 mt-2">Semua yang Anda butuhkan dalam satu platform terintegrasi.</p>
+                <section id="features" className="py-5">
+                    <Container>
+                        <div className="text-center mb-5">
+                            <h2 className="display-5 fw-bold">Fitur Unggulan Kami</h2>
+                            <p className="text-muted">Semua yang Anda butuhkan dalam satu platform terintegrasi.</p>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            <FeatureCard 
-                                icon={ICONS.employees} 
-                                title="Manajemen Karyawan" 
-                                description="Kelola data karyawan secara terpusat, mulai dari informasi pribadi hingga riwayat pekerjaan."
-                            />
-                            <FeatureCard 
-                                icon={ICONS.leave} 
-                                title="Pengajuan Cuti Online" 
-                                description="Proses pengajuan dan persetujuan cuti yang mudah dan transparan, langsung dari aplikasi."
-                            />
-                            <FeatureCard 
-                                icon={ICONS.payroll} 
-                                title="Penggajian Otomatis" 
-                                description="Hitung gaji, tunjangan, dan potongan secara akurat dan efisien setiap periode."
-                            />
-                            <FeatureCard 
-                                icon={ICONS.performance} 
-                                title="Penilaian Kinerja" 
-                                description="Lacak KPI dan berikan umpan balik yang konstruktif untuk pengembangan karyawan."
-                            />
-                            <FeatureCard 
-                                icon={ICONS.attendance} 
-                                title="Absensi Digital" 
-                                description="Pantau kehadiran karyawan dengan sistem clock-in/clock-out yang mudah digunakan."
-                            />
-                             <FeatureCard 
-                                icon={ICONS.reports} 
-                                title="Laporan Komprehensif" 
-                                description="Hasilkan laporan SDM yang informatif untuk mendukung pengambilan keputusan strategis."
-                            />
-                        </div>
-                    </div>
+                        <Row xs={1} md={2} lg={3} className="g-4">
+                            <Col>
+                                <FeatureCard 
+                                    icon={ICONS.employees} 
+                                    title="Manajemen Karyawan" 
+                                    description="Kelola data karyawan secara terpusat, mulai dari informasi pribadi hingga riwayat pekerjaan."
+                                />
+                            </Col>
+                            <Col>
+                                <FeatureCard 
+                                    icon={ICONS.leave} 
+                                    title="Pengajuan Cuti Online" 
+                                    description="Proses pengajuan dan persetujuan cuti yang mudah dan transparan, langsung dari aplikasi."
+                                />
+                            </Col>
+                            <Col>
+                                <FeatureCard 
+                                    icon={ICONS.payroll} 
+                                    title="Penggajian Otomatis" 
+                                    description="Hitung gaji, tunjangan, dan potongan secara akurat dan efisien setiap periode."
+                                />
+                            </Col>
+                            <Col>
+                                <FeatureCard 
+                                    icon={ICONS.performance} 
+                                    title="Penilaian Kinerja" 
+                                    description="Lacak KPI dan berikan umpan balik yang konstruktif untuk pengembangan karyawan."
+                                />
+                            </Col>
+                            <Col>
+                                <FeatureCard 
+                                    icon={ICONS.attendance} 
+                                    title="Absensi Digital" 
+                                    description="Pantau kehadiran karyawan dengan sistem clock-in/clock-out yang mudah digunakan."
+                                />
+                            </Col>
+                            <Col>
+                                <FeatureCard 
+                                    icon={ICONS.reports} 
+                                    title="Laporan Komprehensif" 
+                                    description="Hasilkan laporan SDM yang informatif untuk mendukung pengambilan keputusan strategis."
+                                />
+                            </Col>
+                        </Row>
+                    </Container>
                 </section>
                 
-                {/* About Section */}
-                <section id="about" className="py-20 bg-gray-50">
-                     <div className="container mx-auto px-6 text-center">
-                        <h2 className="text-3xl md:text-4xl font-bold text-gray-800">Dibangun untuk Efisiensi</h2>
-                         <p className="text-gray-600 mt-4 max-w-3xl mx-auto">
+                <section id="about" className="py-5 bg-light">
+                     <Container className="text-center">
+                        <h2 className="display-5 fw-bold">Dibangun untuk Efisiensi</h2>
+                         <p className="text-muted mt-3 lead">
                             Portal SDM kami dirancang untuk menghilangkan tugas administratif yang berulang, memungkinkan tim SDM Anda untuk menjadi mitra strategis bagi pertumbuhan bisnis. Dengan antarmuka yang intuitif dan alur kerja yang cerdas, kami memberdayakan baik admin maupun karyawan.
                          </p>
-                    </div>
+                    </Container>
                 </section>
-
             </main>
 
-            {/* Footer */}
-            <footer className="bg-primary-900 text-white py-6">
-                <div className="container mx-auto px-6 text-center">
-                    <p>&copy; {new Date().getFullYear()} Portal SDM. Seluruh hak cipta.</p>
-                </div>
+            <footer className="bg-dark text-white py-4">
+                <Container className="text-center">
+                    <p className="mb-0">&copy; {new Date().getFullYear()} Portal SDM. Seluruh hak cipta.</p>
+                </Container>
             </footer>
         </div>
     );

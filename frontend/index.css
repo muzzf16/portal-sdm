@@ -1,0 +1,47 @@
+/* Bootstrap CSS */
+@import 'bootstrap/dist/css/bootstrap.min.css';
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+
+/* Custom styles can be added here */
+.sidebar {
+  width: 280px;
+  transition: width 0.3s;
+}
+
+.sidebar.collapsed {
+  width: 80px;
+}
+
+.sidebar .nav-link {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar.collapsed .nav-link {
+  justify-content: center;
+}
+
+.sidebar.collapsed .nav-link .link-text {
+  display: none;
+}
+
+.sidebar .nav-link .badge {
+  margin-left: auto;
+}
+
+.sidebar.collapsed .nav-link .badge {
+    display: none;
+}
+
+.sidebar.collapsed .nav-link .icon-badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 10px;
+    height: 10px;
+}
+
+.feature-icon svg {
+    width: 32px;
+    height: 32px;
+}
