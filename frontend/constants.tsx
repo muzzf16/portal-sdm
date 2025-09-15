@@ -21,6 +21,7 @@ export const ADMIN_NAV_LINKS = [
     { name: 'Permintaan Data', icon: ICONS.reports, view: 'data-requests' },
     { name: 'Penilaian Kinerja', icon: ICONS.performance, view: 'performance' },
     { name: 'Penggajian', icon: ICONS.payroll, view: 'payroll' },
+    { name: 'Pengumuman', icon: ICONS.announcement, view: 'announcements' },
     { name: 'Manajemen Pengguna', icon: ICONS.users, view: 'users' },
     { name: 'Laporan', icon: ICONS.reports, view: 'reports' },
 ];

@@ -113,7 +113,17 @@ const EmployeeDashboard: React.FC<{ latestNewPayslip: Payroll | null, setActiveV
                 <Col md={4}>
                     <Card>
                         <h3 className="h5">Pengumuman</h3>
-                        <p className="text-muted">Kantor akan libur pada 17 Agustus untuk Hari Kemerdekaan.</p>
+                        {db && db.announcements && db.announcements.length > 0 ? (
+                            <div>
+                                <h4 className="h6">{db.announcements[0].title}</h4>
+                                <p className="text-muted small">
+                                    {new Date(db.announcements[0].createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                </p>
+                                <p className="text-muted">{db.announcements[0].message}</p>
+                            </div>
+                        ) : (
+                            <p className="text-muted">Tidak ada pengumuman baru.</p>
+                        )}
                     </Card>
                 </Col>
             </Row>
@@ -894,10 +904,29 @@ const MyPayslips: React.FC<{ onMount: () => void }> = ({ onMount }) => {
     }, [user, db]);
 
     const myPayslips = useMemo(() => {
-        const employeeId = user?.employeeDetails?.id || user?.employeeId;
-        if (!db || !user || !employeeId) return [];
-        return db.payrolls.filter(p => p.employeeId === employeeId);
-    }, [db, user]);
+        if (!employee || !employee.payrollInfo) {
+            return [];
+        }
+
+        const { payrollInfo } = employee;
+        const totalIncome = (payrollInfo.baseSalary || 0) + (payrollInfo.incomes?.reduce((sum, item) => sum + item.amount, 0) || 0);
+        const totalDeductions = payrollInfo.deductions?.reduce((sum, item) => sum + item.amount, 0) || 0;
+
+        const currentPayslip: Payroll = {
+            id: 'current-payslip',
+            employeeId: employee.id,
+            employeeName: user?.name || '',
+            period: 'Konfigurasi Gaji Saat Ini',
+            baseSalary: payrollInfo.baseSalary || 0,
+            incomes: payrollInfo.incomes || [],
+            deductions: payrollInfo.deductions || [],
+            totalIncome: totalIncome,
+            totalDeductions: totalDeductions,
+            netSalary: totalIncome - totalDeductions,
+        };
+
+        return [currentPayslip];
+    }, [employee, user]);
 
     const [selectedPayslip, setSelectedPayslip] = useState<Payroll | null>(null);
 

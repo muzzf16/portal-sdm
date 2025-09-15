@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Layout } from '../components/Layout';
 import { ADMIN_NAV_LINKS, ICONS, attendanceData, GOLONGAN_OPTIONS } from '../constants';
 import { Card, StatCard, PageTitle, Textarea, Input, Select } from '../components/ui';
-import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus, DataChangeRequest } from '../types';
+import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus, DataChangeRequest, Announcement } from '../types';
 import { useData } from '../context/DataContext';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -120,15 +120,20 @@ const EmployeeManagement: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
 
     const openFormModal = (employee: Employee | null = null) => {
+        console.log('openFormModal called with employee:', employee);
         if (employee) {
             const user = users.find(u => u.employeeDetails?.id === employee.id);
+            console.log('Found user for employee:', user);
             setSelectedEmployeeForForm({ ...employee, name: user?.name, email: user?.email });
         } else {
+            console.log('Opening form for new employee');
             setSelectedEmployeeForForm(null);
         }
+        console.log('Setting isFormModalOpen to true');
         setIsFormModalOpen(true);
     };
     const closeFormModal = () => {
+        console.log('closeFormModal called');
         setIsFormModalOpen(false);
         setSelectedEmployeeForForm(null);
     };
@@ -144,20 +149,27 @@ const EmployeeManagement: React.FC = () => {
     }
     
     const handleSave = async (data: Partial<Employee> & { name: string; email: string }) => {
+        console.log('handleSave called with data:', data);
         setIsLoading(true);
         try {
             if (data.id) { // Edit
+                console.log('Updating existing employee with ID:', data.id);
                 await api.updateEmployee(data.id, data);
                 addToast('Data karyawan berhasil diperbarui', 'success');
             } else { // Add
+                console.log('Creating new employee');
                 await api.addEmployee(data);
                 addToast('Karyawan baru berhasil ditambahkan', 'success');
             }
+            console.log('Refreshing data...');
             await refreshData();
+            console.log('Closing form modal...');
             closeFormModal();
         } catch (error) {
+            console.error('Error in handleSave:', error);
             addToast(error instanceof Error ? error.message : 'Gagal menyimpan data', 'error');
         } finally {
+            console.log('Setting isLoading to false');
             setIsLoading(false);
         }
     };
@@ -278,17 +290,25 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         payrollInfo: employee?.payrollInfo || { baseSalary: 0, incomes: [], deductions: [] },
     });
 
+    // Tambahkan console log untuk debugging
+    console.log('EmployeeFormModal rendered with employee:', employee);
+    console.log('Initial formData:', formData);
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
-        setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
+        const newValue = type === 'checkbox' ? checked : value;
+        console.log(`Field ${name} changed to:`, newValue);
+        setFormData({ ...formData, [name]: newValue });
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
+            console.log('File selected:', file);
             const reader = new FileReader();
             reader.onloadend = () => {
+                console.log('File read complete, result:', reader.result);
                 setFormData({ ...formData, avatarUrl: reader.result as string });
             };
             reader.readAsDataURL(file);
@@ -298,6 +318,7 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
     const handleDynamicChange = (index: number, e: React.ChangeEvent<HTMLInputElement>, field: 'educationHistory' | 'workHistory' | 'trainingCertificates') => {
         const list = [...(formData[field] || [])];
         list[index] = { ...list[index], [e.target.name]: e.target.value };
+        console.log(`Dynamic field ${field}[${index}] changed:`, list[index]);
         setFormData({ ...formData, [field]: list as any });
     } 
     
@@ -308,17 +329,20 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         if (field === 'workHistory') newItem = { company: '', position: '', startDate: '', endDate: '' };
         if (field === 'trainingCertificates') newItem = { name: '', issuer: '', issueDate: '' };
         
+        console.log(`Adding new item to ${field}:`, newItem);
         setFormData({ ...formData, [field]: [...list, newItem] as any });
     };
 
     const handleRemoveItem = (index: number, field: 'educationHistory' | 'workHistory' | 'trainingCertificates') => {
         const list = [...(formData[field] || [])];
         list.splice(index, 1);
+        console.log(`Removing item from ${field} at index ${index}`);
         setFormData({ ...formData, [field]: list as any });
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('Form submitted with data:', formData);
         onSave(formData);
     };
 
@@ -328,7 +352,7 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
                 <Modal.Title>{employee ? "Ubah Data Karyawan" : "Tambah Karyawan"}</Modal.Title>
             </Modal.Header>
             <Modal.Body style={{maxHeight: '70vh', overflowY: 'auto'}}>
-                <Form onSubmit={handleSubmit}>
+                <Form id="employee-form" onSubmit={handleSubmit}>
                     <fieldset className="border p-3 rounded mb-4">
                         <legend className="px-2 h6">Foto Profil</legend>
                         <div className="d-flex align-items-center gap-3">
@@ -395,6 +419,33 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
                             </div>
                         ))}
                         <Button type="button" variant="secondary" onClick={() => handleAddItem('educationHistory')}>+ Tambah Pendidikan</Button>
+                    </fieldset>
+
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Riwayat Pekerjaan</legend>
+                        {formData.workHistory?.map((work, index) => (
+                            <div key={index} className="row g-2 mb-2 p-2 border rounded position-relative">
+                                <div className="col-md-3"><Input label="Perusahaan" name="company" value={work.company} onChange={e => handleDynamicChange(index, e, 'workHistory')} /></div>
+                                <div className="col-md-3"><Input label="Posisi" name="position" value={work.position} onChange={e => handleDynamicChange(index, e, 'workHistory')} /></div>
+                                <div className="col-md-3"><Input label="Tanggal Mulai" name="startDate" type="date" value={work.startDate} onChange={e => handleDynamicChange(index, e, 'workHistory')} /></div>
+                                <div className="col-md-3"><Input label="Tanggal Selesai" name="endDate" type="date" value={work.endDate} onChange={e => handleDynamicChange(index, e, 'workHistory')} /></div>
+                                <button type="button" onClick={() => handleRemoveItem(index, 'workHistory')} className="btn-close position-absolute top-0 end-0 mt-1 me-1"></button>
+                            </div>
+                        ))}
+                        <Button type="button" variant="secondary" onClick={() => handleAddItem('workHistory')}>+ Tambah Pekerjaan</Button>
+                    </fieldset>
+
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Sertifikat Pelatihan</legend>
+                        {formData.trainingCertificates?.map((cert, index) => (
+                            <div key={index} className="row g-2 mb-2 p-2 border rounded position-relative">
+                                <div className="col-md-4"><Input label="Nama Sertifikat" name="name" value={cert.name} onChange={e => handleDynamicChange(index, e, 'trainingCertificates')} /></div>
+                                <div className="col-md-4"><Input label="Penerbit" name="issuer" value={cert.issuer} onChange={e => handleDynamicChange(index, e, 'trainingCertificates')} /></div>
+                                <div className="col-md-4"><Input label="Tanggal Terbit" name="issueDate" type="date" value={cert.issueDate} onChange={e => handleDynamicChange(index, e, 'trainingCertificates')} /></div>
+                                <button type="button" onClick={() => handleRemoveItem(index, 'trainingCertificates')} className="btn-close position-absolute top-0 end-0 mt-1 me-1"></button>
+                            </div>
+                        ))}
+                        <Button type="button" variant="secondary" onClick={() => handleAddItem('trainingCertificates')}>+ Tambah Sertifikat</Button>
                     </fieldset>
                 </Form>
             </Modal.Body>
@@ -527,7 +578,6 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
         const { db, refreshData } = useData();
         const { addToast } = useToast();
         const { leaveRequests } = db!;
-    const API_BASE_URL = 'http://localhost:2025';
     
     const [rejectionModalState, setRejectionModalState] = useState<{ isOpen: boolean, requestId: string | null }>({ isOpen: false, requestId: null });
     const [rejectionReason, setRejectionReason] = useState('');
@@ -563,22 +613,11 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
     }
     
     const openDocumentModal = (documentUrl: string, fileName: string) => {
-        let fullUrl = documentUrl;
-        
-        if (documentUrl.startsWith('/uploads/')) {
-            fullUrl = `${API_BASE_URL}${documentUrl}`;
-        } 
-        else if (documentUrl.startsWith('http://') || documentUrl.startsWith('https://')) {
-            fullUrl = documentUrl;
-        }
-        else if (documentUrl.startsWith('file://')) {
-            const filename = documentUrl.split('/').pop();
-            if (filename) {
-                fullUrl = `${API_BASE_URL}/uploads/${filename}`;
-            }
-        }
-        
-        setDocumentModalState({ isOpen: true, documentUrl: fullUrl, fileName });
+        // With the /uploads proxy in vite.config.ts, we can use relative URLs directly.
+        // The browser will request from the Vite server, which then proxies to the backend.
+        // Absolute URLs (http/https) will work as-is.
+        // The previous logic for 'file://' was likely incorrect and has been removed for security and consistency.
+        setDocumentModalState({ isOpen: true, documentUrl: documentUrl, fileName });
     };
     
     const closeDocumentModal = () => {
@@ -877,7 +916,7 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
 };
 
 
-const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string}, onSave: (review: Omit<PerformanceReview, 'id' | 'overallScore'>) => void, onClose: () => void }> = ({ employee, onSave, onClose }) => {
+const PerformanceReviewFormModal: React.FC <{ employee: {id: string, name: string}, onSave: (review: Omit<PerformanceReview, 'id' | 'overallScore'>) => void, onClose: () => void }> = ({ employee, onSave, onClose }) => {
     const defaultKpi: Omit<KPI, 'id'> = { metric: '', target: '', result: '', weight: 0, score: 3, notes: '' };
     const [reviewData, setReviewData] = useState<Omit<PerformanceReview, 'id' | 'employeeId' | 'employeeName' | 'overallScore'>>({
         period: 'Q3 2024',
@@ -1047,7 +1086,7 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
     );
 };
 
-const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (employeeId: string, payrollInfo: PayrollInfo) => void; onClose: () => void; }> = ({ employee, user, onSave, onClose }) => {
+const PayrollSettingsModal: React.FC <{ employee: Employee; user: User; onSave: (employeeId: string, payrollInfo: PayrollInfo) => void; onClose: () => void; show: boolean; }> = ({ employee, user, onSave, onClose, show }) => {
     const [payrollInfo, setPayrollInfo] = useState<PayrollInfo>(employee.payrollInfo);
 
     const handleBaseSalaryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1062,7 +1101,7 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
     };
 
     const addComponent = (type: 'incomes' | 'deductions') => {
-        const newComponent: PayComponent = { id: `comp-${Date.now()}`, name: '', amount: 0 };
+        const newComponent: PayComponent = { id: `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name: '', amount: 0 };
         setPayrollInfo({ ...payrollInfo, [type]: [...payrollInfo[type], newComponent] });
     } 
     
@@ -1074,16 +1113,17 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log("PayrollSettingsModal: handleSubmit called");
         onSave(employee.id, payrollInfo);
     };
 
     return (
-        <Modal show={true} onHide={onClose} size="lg">
+        <Modal show={show} onHide={onClose} size="lg">
             <Modal.Header closeButton>
                 <Modal.Title>{`Kelola Gaji: ${user.name}`}</Modal.Title>
             </Modal.Header>
             <Modal.Body style={{maxHeight: '70vh', overflowY: 'auto'}}>
-                <Form onSubmit={handleSubmit}>
+                <Form id="payroll-settings-form" onSubmit={handleSubmit}>
                     <Input label="Gaji Pokok" type="number" value={payrollInfo.baseSalary} onChange={handleBaseSalaryChange} />
 
                     <fieldset className="border p-3 rounded mb-4">
@@ -1113,7 +1153,7 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
             </Modal.Body>
             <Modal.Footer>
                 <Button variant="secondary" onClick={onClose}>Batal</Button>
-                <Button type="submit">Simpan Pengaturan</Button>
+                <Button type="submit" form="payroll-settings-form">Simpan Pengaturan</Button>
             </Modal.Footer>
         </Modal>
     );
@@ -1141,6 +1181,7 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
     };
 
     const handleSavePayroll = async (employeeId: string, payrollInfo: PayrollInfo) => {
+        console.log("PayrollManagement: handleSavePayroll called", { employeeId, payrollInfo });
         try {
             await api.updatePayrollInfo(employeeId, payrollInfo);
             addToast("Pengaturan gaji berhasil disimpan.", 'success');
@@ -1195,12 +1236,13 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
                     user={selectedEmployee.user}
                     onClose={closeModal}
                     onSave={handleSavePayroll}
+                    show={isModalOpen}
                 />
             )}
         </div>
     );
 }
-const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> = ({ reportName, onClose }) => {
+const EmailReportModal: React.FC <{ reportName: string; onClose: () => void; }> = ({ reportName, onClose }) => {
     const [email, setEmail] = useState('');
     const { addToast } = useToast();
     const { user } = useContext(AuthContext);
@@ -1443,7 +1485,7 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
                                 <td style={{maxWidth: '200px'}} className="text-truncate" title={req.message}>{req.message}</td>
                                 <td><span className={`badge ${statusColor(req.status)}`}>{req.status}</span></td>
                                 <td className="text-nowrap">
-                                    {req.status === 'Pending' && (
+                                    {req.status.toLowerCase() === 'pending' && (
                                         <>
                                             <Button variant="success" size="sm" onClick={() => handleApprove(req.id)} className="me-2">Setujui</Button>
                                             <Button variant="danger" size="sm" onClick={() => handleReject(req.id)}>Tolak</Button>
@@ -1744,6 +1786,170 @@ const UserManagement: React.FC = () => {
     );
 };
 
+const AnnouncementFormModal: React.FC <{
+    announcement: Announcement | null;
+    onSave: (data: Omit<Announcement, 'id' | 'createdAt'>) => void;
+    onClose: () => void;
+    isLoading: boolean;
+}> = ({ announcement, onSave, onClose, isLoading }) => {
+    const [formData, setFormData] = useState({
+        title: announcement?.title || '',
+        message: announcement?.message || '',
+        author: announcement?.author || 'Admin',
+    });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave(formData);
+    };
+
+    return (
+        <Modal show={true} onHide={onClose} centered>
+            <Modal.Header closeButton>
+                <Modal.Title>{announcement ? 'Ubah Pengumuman' : 'Buat Pengumuman Baru'}</Modal.Title>
+            </Modal.Header>
+            <Form onSubmit={handleSubmit}>
+                <Modal.Body>
+                    <Input
+                        label="Judul"
+                        name="title"
+                        value={formData.title}
+                        onChange={handleChange}
+                        required
+                    />
+                    <Textarea
+                        label="Pesan Pengumuman"
+                        name="message"
+                        value={formData.message}
+                        onChange={handleChange}
+                        required
+                        rows={5}
+                    />
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={onClose}>Batal</Button>
+                    <Button type="submit" disabled={isLoading}>
+                        {isLoading ? 'Menyimpan...' : 'Simpan'}
+                    </Button>
+                </Modal.Footer>
+            </Form>
+        </Modal>
+    );
+};
+
+const AnnouncementManagement: React.FC = () => {
+    const { db, refreshData } = useData();
+    const { addToast } = useToast();
+    const announcements = db!.announcements || [];
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const openModal = (announcement: Announcement | null = null) => {
+        setSelectedAnnouncement(announcement);
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setSelectedAnnouncement(null);
+        setIsModalOpen(false);
+    };
+
+    const handleSave = async (data: Omit<Announcement, 'id' | 'createdAt'>) => {
+        setIsLoading(true);
+        try {
+            if (selectedAnnouncement) {
+                await api.updateAnnouncement(selectedAnnouncement.id, { title: data.title, message: data.message });
+                addToast('Pengumuman berhasil diperbarui', 'success');
+            } else {
+                await api.createAnnouncement({ title: data.title, message: data.message });
+                addToast('Pengumuman berhasil dibuat', 'success');
+            }
+            await refreshData();
+            closeModal();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Gagal menyimpan pengumuman';
+            addToast(errorMessage, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('Apakah Anda yakin ingin menghapus pengumuman ini?')) {
+            return;
+        }
+        try {
+            await api.deleteAnnouncement(id);
+            addToast('Pengumuman berhasil dihapus', 'success');
+            await refreshData();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Gagal menghapus pengumuman';
+            addToast(errorMessage, 'error');
+        }
+    };
+
+    return (
+        <div>
+            <PageTitle title="Manajemen Pengumuman">
+                <Button onClick={() => openModal()}>Buat Pengumuman Baru</Button>
+            </PageTitle>
+            <Card>
+                <div className="table-responsive">
+                    <table className="table table-hover align-middle">
+                        <thead className="table-light">
+                            <tr>
+                                <th scope="col" className="py-3">Judul</th>
+                                <th scope="col" className="py-3">Dibuat Pada</th>
+                                <th scope="col" className="py-3">Oleh</th>
+                                <th scope="col" className="py-3">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {announcements.map(ann => (
+                                <tr key={ann.id}>
+                                    <td>{ann.title}</td>
+                                    <td>{new Date(ann.createdAt).toLocaleString('id-ID')}</td>
+                                    <td>{ann.author}</td>
+                                    <td className="text-nowrap">
+                                        <Button variant="secondary" size="sm" onClick={() => openModal(ann)} className="me-2">
+                                            Ubah
+                                        </Button>
+                                        <Button variant="danger" size="sm" onClick={() => handleDelete(ann.id)}>
+                                            Hapus
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {announcements.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="text-center p-4 text-muted">
+                                        Belum ada pengumuman.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+            {isModalOpen && (
+                <AnnouncementFormModal
+                    announcement={selectedAnnouncement}
+                    onSave={handleSave}
+                    onClose={closeModal}
+                    isLoading={isLoading}
+                />
+            )}
+        </div>
+    );
+};
+
 export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
     const { db } = useData();
@@ -1751,7 +1957,7 @@ export const AdminPage: React.FC = () => {
     if (!db) return null; // or a loading spinner
 
     const pendingRequestsCount = useMemo(() => db.leaveRequests.filter(r => r.status === LeaveStatus.PENDING).length, [db.leaveRequests]);
-            const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status === 'Pending').length, [db.dataChangeRequests]);
+            const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status.toLowerCase() === 'pending').length, [db.dataChangeRequests]);
 
     const navLinksWithBadge = useMemo(() => {
         return ADMIN_NAV_LINKS.map(link => {
@@ -1775,6 +1981,7 @@ export const AdminPage: React.FC = () => {
             case 'data-requests': return <DataChangeRequests />;
             case 'performance': return <PerformanceManagement />;
             case 'payroll': return <PayrollManagement />;
+            case 'announcements': return <AnnouncementManagement />;
             case 'users': return <UserManagement />;
             case 'reports': return <Reports />;
             default: return <AdminDashboard pendingRequestsCount={pendingRequestsCount} pendingDataChangeRequestsCount={pendingDataChangeRequestsCount} setActiveView={setActiveView}/>;
@@ -1787,3 +1994,4 @@ export const AdminPage: React.FC = () => {
         </Layout>
     );
 };
+          

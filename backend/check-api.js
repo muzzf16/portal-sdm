@@ -1,5 +1,3 @@
-const fetch = require('node-fetch');
-
 async function fetchData() {
     try {
         const response = await fetch('http://localhost:2025/api/data');

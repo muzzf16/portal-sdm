@@ -6,7 +6,8 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 
 const app = express();
-const PORT = process.env.PORT || 2025;
+//const PORT = process.env.PORT || 2025;
+const PORT = process.env.PORT || 3333;
 const DB_SOURCE = "database.sqlite";
 const DB_JSON_SEED_SOURCE = path.join(__dirname, 'db.json');
 
@@ -31,13 +32,12 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
         console.error("Error connecting to database:", err.message);
         throw err;
     }
-    console.log('Connected to the SQLite database.');
+
     // Enable foreign key constraints
     db.run("PRAGMA foreign_keys = ON", (err) => {
         if (err) {
             console.error("Error enabling foreign key constraints:", err.message);
-        } else {
-            console.log('Foreign key constraints enabled.');
+   
         }
     });
     initializeDb();
@@ -146,9 +146,18 @@ const initializeDb = () => {
             CREATE TABLE IF NOT EXISTS dataChangeRequests (
                 id TEXT PRIMARY KEY, employeeId TEXT, employeeName TEXT, requestDate TEXT, message TEXT, status TEXT
             );
+            CREATE TABLE IF NOT EXISTS announcements (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                createdAt TEXT NOT NULL,
+                author TEXT
+            );
         `, (err) => {
             if (err) return console.error("Error creating tables:", err.message);
             console.log("Tables created or already exist.");
+            // Seed the database after ensuring tables are created
+            seedDatabase();
         });
     });
 };
@@ -175,7 +184,7 @@ const seedDatabase = () => {
                     const userStmt = db.prepare(insertStmt('users', ['id', 'name', 'email', 'password', 'role', 'employeeId']));
                     const salt = bcrypt.genSaltSync(10);
                     const hashedPassword = bcrypt.hashSync('password123', salt); // Default password for all
-                    seedData.users.forEach(u => userStmt.run(u.id, u.name, u.email, hashedPassword, u.role, u.employeeDetails.id));
+                    seedData.users.forEach(u => userStmt.run(u.id, u.name, u.email, hashedPassword, u.role, u.employeeDetails ? u.employeeDetails.id : null));
                     userStmt.finalize();
 
                     // Seed Employees
@@ -269,6 +278,7 @@ app.use(express.static(path.join(__dirname, '../frontend/dist')));
 // GET all data
 app.get('/api/data', async (req, res) => {
     try {
+        console.log("API Request: GET /api/data");
         const tableQueries = {
             users: 'SELECT * FROM users',
             employees: 'SELECT * FROM employees',
@@ -276,16 +286,20 @@ app.get('/api/data', async (req, res) => {
             payrolls: 'SELECT * FROM payrolls',
             performanceReviews: 'SELECT * FROM performanceReviews',
             attendance: 'SELECT * FROM attendance',
-            dataChangeRequests: 'SELECT * FROM dataChangeRequests'
+            dataChangeRequests: 'SELECT * FROM dataChangeRequests',
+            announcements: 'SELECT * FROM announcements ORDER BY createdAt DESC'
         };
 
         const promises = Object.entries(tableQueries).map(async ([tableName, sql]) => {
+            console.log(`Fetching data for table: ${tableName}`);
             const rows = await dbAll(sql);
+            console.log(`Retrieved ${rows.length} rows from ${tableName}`);
             return [tableName, parseJsonFields(rows)];
         });
         
         const results = await Promise.all(promises);
         const dbData = Object.fromEntries(results);
+        console.log("API Response: GET /api/data completed successfully");
 
         res.json(dbData);
     } catch (err) {
@@ -300,9 +314,12 @@ app.get('/api/data', async (req, res) => {
 // GET leave requests data
 app.get('/api/leave-requests', async (req, res) => {
     try {
+        console.log("API Request: GET /api/leave-requests");
         const rows = await dbAll("SELECT * FROM leaveRequests");
+        console.log(`Retrieved ${rows.length} leave requests`);
         res.json(parseJsonFields(rows));
     } catch (err) {
+        console.error("Error in /api/leave-requests endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -311,12 +328,15 @@ app.get('/api/leave-requests', async (req, res) => {
 app.get('/api/employees/:id/leave-summary', async (req, res) => {
     const { id } = req.params;
     try {
+        console.log(`API Request: GET /api/employees/${id}/leave-summary`);
         const employee = await dbGet("SELECT * FROM employees WHERE id = ?", [id]);
         if (!employee) {
+            console.log(`Employee not found for ID: ${id}`);
             return res.status(404).json({ message: 'Employee not found' });
         }
 
         const approvedRequests = await dbAll("SELECT * FROM leaveRequests WHERE employeeId = ? AND status = 'Disetujui'", [id]);
+        console.log(`Found ${approvedRequests.length} approved leave requests for employee ${id}`);
         
         let approvedLeaveTaken = 0;
         approvedRequests.forEach(req => {
@@ -330,11 +350,13 @@ app.get('/api/employees/:id/leave-summary', async (req, res) => {
             nationalHolidays: CUTI_BERSAMA_2024.length,
             approvedLeaveTaken: approvedLeaveTaken,
             currentBalance: employee.leaveBalance, // The actual balance stored in DB
-            calculatedRemaining: employee.leaveBalance - approvedLeaveTaken,
+            calculatedRemaining: employee.leaveBalance, // Corrected: This is the true remaining balance
         };
 
+        console.log(`Leave summary for employee ${id}:`, summary);
         res.json(summary);
     } catch (err) {
+        console.error("Error in /api/employees/:id/leave-summary endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -344,21 +366,26 @@ app.get('/api/employees/:id/leave-summary', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     const { name, password } = req.body;
     try {
+        console.log(`API Request: POST /api/auth/login for user: ${name}`);
         const user = await dbGet("SELECT * FROM users WHERE name = ?", [name]);
         if (!user) {
+            console.log(`User not found: ${name}`);
             return res.status(404).json({ message: "User not found." });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
+            console.log(`Invalid credentials for user: ${name}`);
             return res.status(400).json({ message: "Invalid credentials." });
         }
 
         // Remove password from response
         const { password: _, ...userWithoutPassword } = user;
+        console.log(`Login successful for user: ${name}`);
 
         res.json(userWithoutPassword);
     } catch (err) {
+        console.error("Error in /api/auth/login endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -369,6 +396,7 @@ app.post('/api/employees', async (req, res) => {
     const { name, email, ...employeeData } = req.body;
     const newId = `emp-${Date.now()}`;
     try {
+        console.log(`API Request: POST /api/employees for user: ${name}, email: ${email}`);
         const fullEmployeeRecord = {
             id: newId,
             nip: employeeData.nip || `NIP${Date.now().toString().slice(-4)}`,
@@ -404,6 +432,7 @@ app.post('/api/employees', async (req, res) => {
         await dbRun('INSERT INTO users (id, name, email, password, role, employeeId) VALUES (?,?,?,?,?,?)', Object.values(newUser));
         await dbRun('COMMIT');
         
+        console.log(`Employee created successfully: ${newId}`);
         res.status(201).json(parseJsonFields([fullEmployeeRecord])[0]);
     } catch (err) {
         await dbRun('ROLLBACK');
@@ -419,6 +448,7 @@ app.put('/api/employees/:id', async (req, res) => {
     const { id } = req.params;
     const { name, email, ...employeeData } = req.body;
     try {
+        console.log(`API Request: PUT /api/employees/${id} for user: ${name}, email: ${email}`);
         await dbRun('BEGIN TRANSACTION');
         const fieldsToUpdate = {
             ...employeeData,
@@ -437,12 +467,14 @@ app.put('/api/employees/:id', async (req, res) => {
         if (empResult.changes === 0) {
             // No need to rollback, just means no record was found.
             await dbRun('COMMIT');
+            console.log(`Employee not found for update: ${id}`);
             return res.status(404).json({ message: 'Employee not found' });
         }
         
         await dbRun(`UPDATE users SET name = ?, email = ? WHERE employeeId = ?`, [name, email, id]);
         await dbRun('COMMIT');
         
+        console.log(`Employee updated successfully: ${id}`);
         res.json({ message: 'Employee updated successfully' });
     } catch (err) {
         await dbRun('ROLLBACK');
@@ -460,11 +492,13 @@ app.put('/api/leave-requests/:id', async (req, res) => {
     const { status, rejectionReason } = req.body;
 
     try {
+        console.log(`API Request: PUT /api/leave-requests/${id} with status: ${status}`);
         await dbRun('BEGIN TRANSACTION');
 
         const request = await dbGet("SELECT * FROM leaveRequests WHERE id = ?", [id]);
         if (!request) {
             await dbRun('ROLLBACK');
+            console.log(`Leave request not found: ${id}`);
             return res.status(404).json({ message: 'Leave request not found' });
         }
 
@@ -472,6 +506,7 @@ app.put('/api/leave-requests/:id', async (req, res) => {
         const result = await dbRun(`UPDATE leaveRequests SET status = ?, rejectionReason = ? WHERE id = ?`, [status, rejectionReason || null, id]);
         if (result.changes === 0) {
              await dbRun('ROLLBACK');
+             console.log(`Leave request not found during update: ${id}`);
              return res.status(404).json({ message: 'Leave request not found during update' });
         }
 
@@ -482,13 +517,16 @@ app.put('/api/leave-requests/:id', async (req, res) => {
                 const duration = calculateLeaveDuration(request.startDate, request.endDate);
                 const newBalance = employee.leaveBalance - duration;
                 await dbRun("UPDATE employees SET leaveBalance = ? WHERE id = ?", [newBalance, request.employeeId]);
+                console.log(`Updated leave balance for employee ${request.employeeId}: ${employee.leaveBalance} -> ${newBalance}`);
             }
         }
 
         await dbRun('COMMIT');
+        console.log(`Leave request updated successfully: ${id}`);
         res.json({ message: 'Leave request updated' });
     } catch (err) {
         await dbRun('ROLLBACK');
+        console.error("Error in /api/leave-requests/:id endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -530,6 +568,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // POST submit leave request with file upload
 app.post('/api/leave-requests', upload.single('supportingDocument'), async (req, res) => {
     try {
+        console.log("API Request: POST /api/leave-requests");
         const newRequest = { 
             id: `leave-${Date.now()}`, 
             employeeId: req.body.employeeId,
@@ -546,6 +585,7 @@ app.post('/api/leave-requests', upload.single('supportingDocument'), async (req,
         await dbRun('INSERT INTO leaveRequests (id, employeeId, employeeName, leaveType, startDate, endDate, reason, status, supportingDocument, rejectionReason) VALUES (?,?,?,?,?,?,?,?,?,?)',
             [newRequest.id, newRequest.employeeId, newRequest.employeeName, newRequest.leaveType, newRequest.startDate, newRequest.endDate, newRequest.reason, newRequest.status, newRequest.supportingDocument, newRequest.rejectionReason]
         );
+        console.log(`Leave request created successfully: ${newRequest.id}`);
         res.status(201).json(newRequest);
     } catch (err) {
         console.error("Error creating leave request:", err);
@@ -558,16 +598,22 @@ app.post('/api/attendance/clock-in', async (req, res) => {
     const { employeeId, employeeName } = req.body;
     const today = new Date().toISOString().split('T')[0];
     try {
+        console.log(`API Request: POST /api/attendance/clock-in for employee: ${employeeName} (${employeeId})`);
         const row = await dbGet("SELECT * FROM attendance WHERE employeeId = ? AND date = ?", [employeeId, today]);
-        if (row) return res.status(400).json({ message: 'Already clocked in today.' });
+        if (row) {
+            console.log(`Employee ${employeeName} already clocked in today`);
+            return res.status(400).json({ message: 'Already clocked in today.' });
+        }
 
         const clockInTime = new Date().toLocaleTimeString('en-GB');
         const isLate = clockInTime > '09:00:00';
         const newRecord = { id: `att-${Date.now()}`, employeeId, employeeName, date: today, clockIn: clockInTime, clockOut: null, status: isLate ? 'Terlambat' : 'Tepat Waktu', workDuration: null };
 
         await dbRun('INSERT INTO attendance VALUES (?,?,?,?,?,?,?,?)', Object.values(newRecord));
+        console.log(`Clock in successful for employee ${employeeName}: ${clockInTime}`);
         res.status(201).json(newRecord);
     } catch (err) {
+        console.error("Error in /api/attendance/clock-in endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -577,8 +623,12 @@ app.post('/api/attendance/clock-out', async (req, res) => {
     const { employeeId } = req.body;
     const today = new Date().toISOString().split('T')[0];
     try {
+        console.log(`API Request: POST /api/attendance/clock-out for employee ID: ${employeeId}`);
         const rec = await dbGet("SELECT * FROM attendance WHERE employeeId = ? AND date = ? AND clockIn IS NOT NULL AND clockOut IS NULL", [employeeId, today]);
-        if (!rec) return res.status(404).json({ message: 'No active clock-in record found for today.' });
+        if (!rec) {
+            console.log(`No active clock-in record found for employee ${employeeId} today`);
+            return res.status(404).json({ message: 'No active clock-in record found for today.' });
+        }
         
         const clockOutTime = new Date().toLocaleTimeString('en-GB');
         const startTime = new Date(`${today}T${rec.clockIn}`);
@@ -589,8 +639,10 @@ app.post('/api/attendance/clock-out', async (req, res) => {
         const workDuration = `${diffHrs}j ${diffMins}m`;
         
         await dbRun("UPDATE attendance SET clockOut = ?, workDuration = ? WHERE id = ?", [clockOutTime, workDuration, rec.id]);
+        console.log(`Clock out successful for employee ${employeeId}: ${clockOutTime}, work duration: ${workDuration}`);
         res.json({ message: 'Clock out successful' });
     } catch (err) {
+        console.error("Error in /api/attendance/clock-out endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -611,8 +663,11 @@ const calculateDuration = (start, end) => {
 app.post('/api/attendance/bulk', async (req, res) => {
     const records = req.body;
     if (!Array.isArray(records)) {
+        console.log("Invalid request body for bulk attendance upload");
         return res.status(400).json({ message: 'Invalid request body. Expected an array of attendance records.' });
     }
+    
+    console.log(`API Request: POST /api/attendance/bulk with ${records.length} records`);
 
     const insertStmt = db.prepare('INSERT INTO attendance (id, employeeId, employeeName, date, clockIn, clockOut, status, workDuration) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     const warnings = [];
@@ -640,10 +695,12 @@ app.post('/api/attendance/bulk', async (req, res) => {
         }
         await dbRun('COMMIT');
         insertStmt.finalize();
+        console.log(`Bulk attendance upload completed with ${warnings.length} warnings`);
         res.status(201).json({ message: 'Bulk attendance uploaded successfully', warnings });
     } catch (err) {
         await dbRun('ROLLBACK');
         insertStmt.finalize();
+        console.error("Error in /api/attendance/bulk endpoint:", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -653,6 +710,7 @@ app.post('/api/attendance/bulk', async (req, res) => {
 app.post('/api/performance-reviews', async (req, res) => {
     const reviewData = req.body;
     try {
+        console.log(`API Request: POST /api/performance-reviews for employee: ${reviewData.employeeName}`);
         const totalWeight = reviewData.kpis.reduce((sum, kpi) => sum + kpi.weight, 0) || 1;
         const weightedScore = reviewData.kpis.reduce((sum, kpi) => sum + (kpi.score * kpi.weight), 0);
         const overallScore = parseFloat((weightedScore / totalWeight).toFixed(2));
@@ -662,8 +720,10 @@ app.post('/api/performance-reviews', async (req, res) => {
         await dbRun('INSERT INTO performanceReviews (id, employeeId, employeeName, period, reviewerName, reviewDate, overallScore, status, strengths, areasForImprovement, kpis) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
             [newReview.id, newReview.employeeId, newReview.employeeName, newReview.period, newReview.reviewerName, newReview.reviewDate, newReview.overallScore, newReview.status, newReview.strengths, newReview.areasForImprovement, newReview.kpis]
         );
+        console.log(`Performance review created successfully: ${newReview.id}`);
         res.status(201).json(parseJsonFields([newReview])[0]);
     } catch (err) {
+        console.error("Error in /api/performance-reviews endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -673,10 +733,16 @@ app.put('/api/performance-reviews/:id/feedback', async (req, res) => {
     const { id } = req.params;
     const { feedback } = req.body;
     try {
+        console.log(`API Request: PUT /api/performance-reviews/${id}/feedback`);
         const result = await dbRun(`UPDATE performanceReviews SET employeeFeedback = ? WHERE id = ?`, [feedback, id]);
-        if (result.changes === 0) return res.status(404).json({ message: 'Review not found' });
+        if (result.changes === 0) {
+            console.log(`Performance review not found: ${id}`);
+            return res.status(404).json({ message: 'Review not found' });
+        }
+        console.log(`Feedback submitted for performance review: ${id}`);
         res.json({ message: 'Feedback submitted' });
     } catch (err) {
+        console.error("Error in /api/performance-reviews/:id/feedback endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -685,11 +751,17 @@ app.put('/api/performance-reviews/:id/feedback', async (req, res) => {
 app.put('/api/employees/:id/payroll-info', async (req, res) => {
     const { id } = req.params;
     const payrollInfo = req.body;
+    console.log(`API Request: PUT /api/employees/${id}/payroll-info`, payrollInfo);
     try {
         const result = await dbRun(`UPDATE employees SET payrollInfo = ? WHERE id = ?`, [JSON.stringify(payrollInfo), id]);
-        if (result.changes === 0) return res.status(404).json({ message: 'Employee not found' });
+        if (result.changes === 0) {
+            console.log(`Employee not found for payroll update: ${id}`);
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+        console.log(`Successfully updated payroll for employee ${id}. Changes: ${result.changes}`);
         res.json({ message: 'Payroll info updated' });
     } catch (err) {
+        console.error(`Error updating payroll for employee ${id}:`, err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -697,9 +769,12 @@ app.put('/api/employees/:id/payroll-info', async (req, res) => {
 // GET pending data change requests
 app.get('/api/data-change-requests/pending', async (req, res) => {
     try {
+        console.log("API Request: GET /api/data-change-requests/pending");
         const rows = await dbAll("SELECT * FROM dataChangeRequests WHERE status = 'pending' ORDER BY requestDate DESC");
+        console.log(`Retrieved ${rows.length} pending data change requests`);
         res.json(parseJsonFields(rows));
     } catch (err) {
+        console.error("Error in /api/data-change-requests/pending endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -717,11 +792,14 @@ app.post('/api/data-change-requests', async (req, res) => {
     };
     
     try {
+        console.log(`API Request: POST /api/data-change-requests from employee: ${employeeName}`);
         await dbRun('INSERT INTO dataChangeRequests (id, employeeId, employeeName, requestDate, message, status) VALUES (?,?,?,?,?,?)',
-            [newRequest.id, newRequest.employeeId, newRequest.employeeName, newRequest.requestDate, newRequest.message, newRequest.status]
-        );
+                [newRequest.id, newRequest.employeeId, newRequest.employeeName, newRequest.requestDate, newRequest.message, newRequest.status]
+            );
+        console.log(`Data change request created successfully: ${newRequest.id}`);
         res.status(201).json(newRequest);
     } catch (err) {
+        console.error("Error in /api/data-change-requests endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -732,16 +810,23 @@ app.put('/api/data-change-requests/:id', async (req, res) => {
     const { status } = req.body;
     
     try {
+        console.log(`API Request: PUT /api/data-change-requests/${id} with status: ${status}`);
         const result = await dbRun(`UPDATE dataChangeRequests SET status = ? WHERE id = ?`, [status, id]);
-        if (result.changes === 0) return res.status(404).json({ message: 'Request not found' });
+        if (result.changes === 0) {
+            console.log(`Data change request not found: ${id}`);
+            return res.status(404).json({ message: 'Request not found' });
+        }
+        console.log(`Data change request status updated successfully: ${id}`);
         res.json({ message: 'Request status updated' });
     } catch (err) {
+        console.error("Error in /api/data-change-requests/:id endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
 
 // POST for misc requests
 app.post('/api/misc/:type', (req, res) => {
+    console.log(`API Request: POST /api/misc/${req.params.type}`, req.body);
     console.log(`Received misc request for: ${req.params.type}`, req.body);
     res.json({ message: 'Request received and logged on server.' });
 });
@@ -750,6 +835,7 @@ app.post('/api/misc/:type', (req, res) => {
 // WARNING: This will delete all data from all tables
 app.delete('/api/clear-all-data', async (req, res) => {
     try {
+        console.log("API Request: DELETE /api/clear-all-data");
         await dbRun('BEGIN TRANSACTION');
         
         // Clear all tables
@@ -772,13 +858,82 @@ app.delete('/api/clear-all-data', async (req, res) => {
     }
 });
 
+// --- Announcement CRUD Endpoints ---
+
+// POST create new announcement
+app.post('/api/announcements', async (req, res) => {
+    const { title, message, author } = req.body;
+    try {
+        console.log(`API Request: POST /api/announcements`);
+        const newAnnouncement = {
+            id: `ann-${Date.now()}`,
+            title,
+            message,
+            author: author || 'Admin',
+            createdAt: new Date().toISOString(),
+        };
+
+        await dbRun('INSERT INTO announcements (id, title, message, author, createdAt) VALUES (?, ?, ?, ?, ?)',
+            [newAnnouncement.id, newAnnouncement.title, newAnnouncement.message, newAnnouncement.author, newAnnouncement.createdAt]);
+
+        console.log(`Announcement created successfully: ${newAnnouncement.id}`);
+        res.status(201).json(newAnnouncement);
+    } catch (err) {
+        console.error("Create announcement error:", err);
+        res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+    }
+});
+
+// PUT update announcement
+app.put('/api/announcements/:id', async (req, res) => {
+    const { id } = req.params;
+    const { title, message } = req.body;
+    try {
+        console.log(`API Request: PUT /api/announcements/${id}`);
+        const result = await dbRun(`UPDATE announcements SET title = ?, message = ? WHERE id = ?`,
+            [title, message, id]);
+
+        if (result.changes === 0) {
+            return res.status(404).json({ message: 'Announcement not found' });
+        }
+
+        console.log(`Announcement updated successfully: ${id}`);
+        res.json({ message: 'Announcement updated successfully' });
+    } catch (err) {
+        console.error(`Update announcement ${id} error:`, err);
+        res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+    }
+});
+
+// DELETE announcement
+app.delete('/api/announcements/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        console.log(`API Request: DELETE /api/announcements/${id}`);
+        const result = await dbRun('DELETE FROM announcements WHERE id = ?', [id]);
+
+        if (result.changes === 0) {
+            return res.status(404).json({ message: 'Announcement not found' });
+        }
+
+        console.log(`Announcement deleted successfully: ${id}`);
+        res.json({ message: 'Announcement deleted successfully' });
+    } catch (err) {
+        console.error(`Delete announcement ${id} error:`, err);
+        res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+    }
+});
+
 // USER MANAGEMENT ENDPOINTS
 // GET all users
 app.get('/api/users', async (req, res) => {
     try {
+        console.log("API Request: GET /api/users");
         const rows = await dbAll("SELECT id, name, email, role FROM users ORDER BY name");
+        console.log(`Retrieved ${rows.length} users`);
         res.json(rows);
     } catch (err) {
+        console.error("Error in /api/users endpoint:", err);
         res.status(500).json({ "error": err.message });
     }
 });
@@ -787,9 +942,11 @@ app.get('/api/users', async (req, res) => {
 app.post('/api/users', async (req, res) => {
     const { name, email, password, role } = req.body;
     try {
+        console.log(`API Request: POST /api/users for user: ${name}, email: ${email}, role: ${role}`);
         // Check if user already exists
         const existingUser = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
         if (existingUser) {
+            console.log(`Email already exists: ${email}`);
             return res.status(400).json({ message: 'Email already exists' });
         }
 
@@ -802,6 +959,7 @@ app.post('/api/users', async (req, res) => {
         await dbRun('INSERT INTO users (id, name, email, password, role) VALUES (?, ?, ?, ?, ?)', 
             [newUserId, name, email, hashedPassword, role]);
         
+        console.log(`User created successfully: ${newUserId}`);
         res.status(201).json({ id: newUserId, name, email, role });
     } catch (err) {
         console.error("Create user error:", err);
@@ -814,9 +972,11 @@ app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const { name, email, role } = req.body;
     try {
+        console.log(`API Request: PUT /api/users/${id} for user: ${name}, email: ${email}, role: ${role}`);
         // Check if email is already used by another user
         const existingUser = await dbGet("SELECT * FROM users WHERE email = ? AND id != ?", [email, id]);
         if (existingUser) {
+            console.log(`Email already exists: ${email}`);
             return res.status(400).json({ message: 'Email already exists' });
         }
 
@@ -824,9 +984,11 @@ app.put('/api/users/:id', async (req, res) => {
             [name, email, role, id]);
         
         if (result.changes === 0) {
+            console.log(`User not found for update: ${id}`);
             return res.status(404).json({ message: 'User not found' });
         }
         
+        console.log(`User updated successfully: ${id}`);
         res.json({ message: 'User updated successfully' });
     } catch (err) {
         console.error(`Update user ${id} error:`, err);
@@ -838,9 +1000,11 @@ app.put('/api/users/:id', async (req, res) => {
 app.delete('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     try {
+        console.log(`API Request: DELETE /api/users/${id}`);
         // Check if user exists
         const user = await dbGet("SELECT * FROM users WHERE id = ?", [id]);
         if (!user) {
+            console.log(`User not found for deletion: ${id}`);
             return res.status(404).json({ message: 'User not found' });
         }
 
@@ -848,6 +1012,7 @@ app.delete('/api/users/:id', async (req, res) => {
         if (user.role === 'ADMIN') {
             const adminCount = await dbGet("SELECT COUNT(*) as count FROM users WHERE role = 'ADMIN'");
             if (adminCount.count <= 1) {
+                console.log(`Cannot delete the last admin user: ${id}`);
                 return res.status(400).json({ message: 'Cannot delete the last admin user' });
             }
         }
@@ -855,6 +1020,7 @@ app.delete('/api/users/:id', async (req, res) => {
         // Delete user
         await dbRun('DELETE FROM users WHERE id = ?', [id]);
         
+        console.log(`User deleted successfully: ${id}`);
         res.json({ message: 'User deleted successfully' });
     } catch (err) {
         console.error(`Delete user ${id} error:`, err);
@@ -874,4 +1040,5 @@ app.get('*', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server Sistem Manajemen SDM berjalan di http://localhost:${PORT}`);
     console.log(`Database file is at: ${path.join(__dirname, DB_SOURCE)}`);
+    console.log('Server started successfully with comprehensive API logging enabled');
 });

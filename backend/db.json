@@ -1,1 +1,153 @@
-{}
+{
+  "users": [
+    {
+      "id": "user-admin-1",
+      "name": "Admin User",
+      "email": "admin@example.com",
+      "password": "password123",
+      "role": "ADMIN",
+      "employeeDetails": null
+    },
+    {
+      "id": "user-emp-1",
+      "name": "John Doe",
+      "email": "john.doe@example.com",
+      "password": "password123",
+      "role": "EMPLOYEE",
+      "employeeDetails": {
+        "id": "emp-1",
+        "nip": "12345",
+        "position": "Software Engineer",
+        "pangkat": "Staff",
+        "golongan": "III/A",
+        "department": "IT",
+        "joinDate": "2023-01-15",
+        "avatarUrl": "https://picsum.photos/id/1005/200",
+        "leaveBalance": 18,
+        "isActive": true,
+        "address": "Jl. Contoh No. 123",
+        "phone": "081234567890",
+        "pob": "Jakarta",
+        "dob": "1990-05-20",
+        "gender": "Laki-laki",
+        "religion": "Islam",
+        "maritalStatus": "Menikah",
+        "numberOfChildren": 2,
+        "educationHistory": [
+          {
+            "level": "S1",
+            "institution": "Universitas Contoh",
+            "major": "Teknik Informatika",
+            "graduationYear": 2012
+          }
+        ],
+        "workHistory": [
+          {
+            "company": "PT. Lama",
+            "position": "Junior Developer",
+            "startDate": "2012-08-01",
+            "endDate": "2022-12-31"
+          }
+        ],
+        "trainingCertificates": [
+          {
+            "name": "Certified Scrum Master",
+            "issuer": "Scrum Alliance",
+            "issueDate": "2020-03-10"
+          }
+        ],
+        "payrollInfo": {
+          "baseSalary": 5000000,
+          "incomes": [
+            { "id": "inc-1", "name": "Tunjangan Transport", "amount": 500000 },
+            { "id": "inc-2", "name": "Tunjangan Makan", "amount": 300000 }
+          ],
+          "deductions": [
+            { "id": "ded-1", "name": "BPJS Kesehatan", "amount": 100000 },
+            { "id": "ded-2", "name": "Pajak Penghasilan", "amount": 200000 }
+          ]
+        }
+      }
+    }
+  ],
+  "employees": [
+    {
+      "id": "emp-1",
+      "nip": "12345",
+      "position": "Software Engineer",
+      "pangkat": "Staff",
+      "golongan": "III/A",
+      "department": "IT",
+      "joinDate": "2023-01-15",
+      "avatarUrl": "https://picsum.photos/id/1005/200",
+      "leaveBalance": 18,
+      "isActive": true,
+      "address": "Jl. Contoh No. 123",
+      "phone": "081234567890",
+      "pob": "Jakarta",
+      "dob": "1990-05-20",
+      "gender": "Laki-laki",
+      "religion": "Islam",
+      "maritalStatus": "Menikah",
+      "numberOfChildren": 2,
+      "educationHistory": [
+        {
+          "level": "S1",
+          "institution": "Universitas Contoh",
+          "major": "Teknik Informatika",
+          "graduationYear": 2012
+        }
+      ],
+      "workHistory": [
+        {
+          "company": "PT. Lama",
+          "position": "Junior Developer",
+          "startDate": "2012-08-01",
+          "endDate": "2022-12-31"
+        }
+      ],
+      "trainingCertificates": [
+        {
+          "name": "Certified Scrum Master",
+          "issuer": "Scrum Alliance",
+          "issueDate": "2020-03-10"
+        }
+      ],
+      "payrollInfo": {
+        "baseSalary": 5000000,
+        "incomes": [
+          { "id": "inc-1", "name": "Tunjangan Transport", "amount": 500000 },
+          { "id": "inc-2", "name": "Tunjangan Makan", "amount": 300000 }
+        ],
+        "deductions": [
+          { "id": "ded-1", "name": "BPJS Kesehatan", "amount": 100000 },
+          { "id": "ded-2", "name": "Pajak Penghasilan", "amount": 200000 }
+        ]
+      }
+    }
+  ],
+  "leaveRequests": [],
+  "payrolls": [
+    {
+      "id": "pay-1",
+      "employeeId": "emp-1",
+      "employeeName": "John Doe",
+      "period": "September 2025",
+      "baseSalary": 5000000,
+      "incomes": [
+        { "id": "inc-1", "name": "Tunjangan Transport", "amount": 500000 },
+        { "id": "inc-2", "name": "Tunjangan Makan", "amount": 300000 }
+      ],
+      "deductions": [
+        { "id": "ded-1", "name": "BPJS Kesehatan", "amount": 100000 },
+        { "id": "ded-2", "name": "Pajak Penghasilan", "amount": 200000 }
+      ],
+      "totalIncome": 5800000,
+      "totalDeductions": 300000,
+      "netSalary": 5500000
+    }
+  ],
+  "performanceReviews": [],
+  "attendance": [],
+  "dataChangeRequests": []
+}

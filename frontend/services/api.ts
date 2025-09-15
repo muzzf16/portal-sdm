@@ -176,6 +176,29 @@ const api = {
             body: JSON.stringify({ feedback }),
         }).then(handleResponse);
     },
+
+    // --- Announcements ---
+    createAnnouncement: (data: { title: string; message: string; author?: string }) => {
+        return fetch(`${API_BASE_URL}/announcements`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }).then(handleResponse);
+    },
+
+    updateAnnouncement: (id: string, data: { title: string; message: string }) => {
+        return fetch(`${API_BASE_URL}/announcements/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }).then(handleResponse);
+    },
+
+    deleteAnnouncement: (id: string) => {
+        return fetch(`${API_BASE_URL}/announcements/${id}`, {
+            method: 'DELETE',
+        }).then(handleResponse);
+    },
 };
 
 export default api;

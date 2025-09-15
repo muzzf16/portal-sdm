@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
-import { User, Employee, LeaveRequest, Payroll, PerformanceReview, AttendanceRecord, DataChangeRequest } from '../types';
+import { User, Employee, LeaveRequest, Payroll, PerformanceReview, AttendanceRecord, DataChangeRequest, Announcement } from '../types';
 import api from '../services/api';
 import { AuthContext } from '../App';
 
@@ -11,6 +11,7 @@ export interface MockDatabase {
     performanceReviews: PerformanceReview[];
     attendance: AttendanceRecord[];
     dataChangeRequests: DataChangeRequest[];
+    announcements: Announcement[];
 }
 
 interface DataContextType {
