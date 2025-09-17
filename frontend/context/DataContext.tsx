@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import { User, Employee, LeaveRequest, Payroll, PerformanceReview, AttendanceRecord, DataChangeRequest, Announcement } from '../types';
 import api from '../services/api';
 import { AuthContext } from '../App';
@@ -59,45 +59,35 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
             // Don't filter out employees - keep all employees in the database
             const employeesWithUsers = data.employees;
 
-            setDb({ ...data, users: hydratedUsers, employees: employeesWithUsers });
-            
-            // If there's a current user, update their data with the latest from the database
-            if (currentUser) {
-                const updatedUser = hydratedUsers.find((u: User) => u.id === currentUser.id);
-                if (updatedUser && JSON.stringify(updatedUser) !== JSON.stringify(currentUser)) {
-                    updateCurrentUser(updatedUser);
-                }
-            }
+            setDb(JSON.parse(JSON.stringify({ ...data, users: hydratedUsers, employees: employeesWithUsers })));
         } catch (error) {
             console.error("Failed to fetch data from API:", error);
         } finally {
             setIsLoading(false);
         }
-    }, [currentUser, updateCurrentUser]);
+    }, []);
 
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        if (!db) {
+            fetchData();
+        }
+    }, [db, fetchData]);
 
-    const contextValue = {
+    const contextValue = useMemo(() => ({
         db,
         refreshData: fetchData,
         isLoading
-    };
-
-    if (isLoading) {
-        return (
-            <DataContext.Provider value={contextValue}>
-                <div className="d-flex vh-100 align-items-center justify-content-center">
-                    <p className="text-lg text-muted">Memuat data...</p>
-                </div>
-            </DataContext.Provider>
-        );
-    }
+    }), [db, isLoading, fetchData]);
 
     return (
         <DataContext.Provider value={contextValue}>
-            {children}
+            {isLoading && !db ? (
+                <div className="d-flex vh-100 align-items-center justify-content-center">
+                    <p className="text-lg text-muted">Memuat data...</p>
+                </div>
+            ) : (
+                children
+            )}
         </DataContext.Provider>
     );
 };

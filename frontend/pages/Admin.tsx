@@ -1,5 +1,5 @@
-import React, { useState, useMemo, Fragment, useContext } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React, { useState, useMemo, Fragment, useContext, useEffect } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Layout } from '../components/Layout';
 import { ADMIN_NAV_LINKS, ICONS, attendanceData, GOLONGAN_OPTIONS } from '../constants';
 import { Card, StatCard, PageTitle, Textarea, Input, Select } from '../components/ui';
@@ -13,6 +13,7 @@ import { Modal, Button, Alert, Form } from 'react-bootstrap';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import SettingsPage from './Settings';
 
 const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
     const [show, setShow] = useState(true);
@@ -58,6 +59,52 @@ const NewDataChangeRequestAlert: React.FC<{ count: number; onViewClick: () => vo
 const AdminDashboard: React.FC<{ pendingRequestsCount: number; pendingDataChangeRequestsCount: number; setActiveView: (view: string) => void }> = ({ pendingRequestsCount, pendingDataChangeRequestsCount, setActiveView }) => {
     const { db } = useData();
     if (!db) return null;
+
+    const genderData = useMemo(() => {
+        const counts = db.employees.reduce((acc, emp) => {
+            const gender = emp.gender || 'Tidak Diketahui';
+            acc[gender] = (acc[gender] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    }, [db.employees]);
+
+    const educationData = useMemo(() => {
+        const counts = db.employees.reduce((acc, emp) => {
+            if (emp.educationHistory && emp.educationHistory.length > 0) {
+                const highestEdu = emp.educationHistory[emp.educationHistory.length - 1];
+                const level = highestEdu.level || 'Lainnya';
+                acc[level] = (acc[level] || 0) + 1;
+            } else {
+                acc['Belum Ada Data'] = (acc['Belum Ada Data'] || 0) + 1;
+            }
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    }, [db.employees]);
+
+    const COLORS = ['#0d6efd', '#ffc107', '#dc3545', '#198754', '#6f42c1', '#fd7e14'];
+
+        const renderCustomizedLabel = (props: any) => {
+        const { cx, cy, midAngle, innerRadius, outerRadius, percent, textAnchor } = props;
+
+        if (cx === undefined || cy === undefined || midAngle === undefined || innerRadius === undefined || outerRadius === undefined || percent === undefined) {
+            return null;
+        }
+
+        const RADIAN = Math.PI / 180;
+        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+        const x = cx + radius * Math.cos(-midAngle * RADIAN);
+        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+        return (
+            <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
+                {`${(percent * 100).toFixed(0)}%`}
+            </text>
+        );
+    };
+
+
     return (
     <div>
         <NewLeaveRequestAlert count={pendingRequestsCount} onViewClick={() => setActiveView('leaves')} />
@@ -77,6 +124,62 @@ const AdminDashboard: React.FC<{ pendingRequestsCount: number; pendingDataChange
                 <StatCard title="Karyawan Baru (Bulan)" value="2" icon={<i className="bi bi-person-plus-fill fs-4"></i>} color="bg-success bg-opacity-10 text-success" />
             </div>
         </div>
+
+        <div className="row g-4 mb-4">
+            <div className="col-md-6">
+                <Card>
+                    <h2 className="card-title">Distribusi Gender</h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie
+                                data={genderData}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={renderCustomizedLabel}
+                                outerRadius={100}
+                                fill="#8884d8"
+                                dataKey="value"
+                                nameKey="name"
+                            >
+                                {genderData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </Card>
+            </div>
+            <div className="col-md-6">
+                <Card>
+                    <h2 className="card-title">Tingkat Pendidikan</h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie
+                                data={educationData}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={renderCustomizedLabel}
+                                outerRadius={100}
+                                fill="#8884d8"
+                                dataKey="value"
+                                nameKey="name"
+                            >
+                                {educationData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </Card>
+            </div>
+        </div>
+
         <Card>
             <h2 className="card-title">Kehadiran Mingguan</h2>
              <ResponsiveContainer width="100%" height={300}>
@@ -120,20 +223,15 @@ const EmployeeManagement: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
 
     const openFormModal = (employee: Employee | null = null) => {
-        console.log('openFormModal called with employee:', employee);
         if (employee) {
             const user = users.find(u => u.employeeDetails?.id === employee.id);
-            console.log('Found user for employee:', user);
             setSelectedEmployeeForForm({ ...employee, name: user?.name, email: user?.email });
         } else {
-            console.log('Opening form for new employee');
             setSelectedEmployeeForForm(null);
         }
-        console.log('Setting isFormModalOpen to true');
         setIsFormModalOpen(true);
     };
     const closeFormModal = () => {
-        console.log('closeFormModal called');
         setIsFormModalOpen(false);
         setSelectedEmployeeForForm(null);
     };
@@ -148,28 +246,33 @@ const EmployeeManagement: React.FC = () => {
         setSelectedEmployeeForDetails(null);
     }
     
-    const handleSave = async (data: Partial<Employee> & { name: string; email: string }) => {
-        console.log('handleSave called with data:', data);
+    const handleSave = async (data: Partial<Employee> & { name: string; email: string }, avatarFile: File | null) => {
         setIsLoading(true);
         try {
-            if (data.id) { // Edit
-                console.log('Updating existing employee with ID:', data.id);
-                await api.updateEmployee(data.id, data);
+            let updatedData = { ...data };
+
+            // First, handle avatar upload if a new file is present and it's an existing employee
+            if (avatarFile && updatedData.id) {
+                await api.uploadAvatar(updatedData.id, avatarFile);
+                addToast('Foto profil berhasil diunggah. Perubahan akan terlihat setelah data dimuat ulang.', 'info');
+            }
+
+            // Then, save the rest of the employee data
+            if (updatedData.id) { // Edit
+                await api.updateEmployee(updatedData.id, updatedData);
                 addToast('Data karyawan berhasil diperbarui', 'success');
             } else { // Add
-                console.log('Creating new employee');
-                await api.addEmployee(data);
+                // Note: Avatar for new employees is not uploaded here. 
+                // The backend assigns a default. It can be changed after creation.
+                await api.addEmployee(updatedData);
                 addToast('Karyawan baru berhasil ditambahkan', 'success');
             }
-            console.log('Refreshing data...');
+            
             await refreshData();
-            console.log('Closing form modal...');
             closeFormModal();
         } catch (error) {
-            console.error('Error in handleSave:', error);
             addToast(error instanceof Error ? error.message : 'Gagal menyimpan data', 'error');
         } finally {
-            console.log('Setting isLoading to false');
             setIsLoading(false);
         }
     };
@@ -262,7 +365,7 @@ const EmployeeManagement: React.FC = () => {
     );
 };
 
-const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: string, email?: string }) | null, onSave: (data: Partial<Employee> & { name: string; email: string }) => void, onClose: () => void, isLoading: boolean }> = ({ employee, onSave, onClose, isLoading }) => {
+const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: string, email?: string }) | null, onSave: (data: Partial<Employee> & { name: string; email: string }, avatarFile: File | null) => void, onClose: () => void, isLoading: boolean }> = ({ employee, onSave, onClose, isLoading }) => {
     const [formData, setFormData] = useState({
         id: employee?.id || undefined,
         name: employee?.name || '',
@@ -289,36 +392,28 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         trainingCertificates: employee?.trainingCertificates || [],
         payrollInfo: employee?.payrollInfo || { baseSalary: 0, incomes: [], deductions: [] },
     });
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
-    // Tambahkan console log untuk debugging
-    console.log('EmployeeFormModal rendered with employee:', employee);
-    console.log('Initial formData:', formData);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
         const newValue = type === 'checkbox' ? checked : value;
-        console.log(`Field ${name} changed to:`, newValue);
         setFormData({ ...formData, [name]: newValue });
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            console.log('File selected:', file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                console.log('File read complete, result:', reader.result);
-                setFormData({ ...formData, avatarUrl: reader.result as string });
-            };
-            reader.readAsDataURL(file);
+        const file = e.target.files?.[0];
+        if (file) {
+            setAvatarFile(file);
+            setAvatarPreview(URL.createObjectURL(file));
         }
     };
 
     const handleDynamicChange = (index: number, e: React.ChangeEvent<HTMLInputElement>, field: 'educationHistory' | 'workHistory' | 'trainingCertificates') => {
         const list = [...(formData[field] || [])];
         list[index] = { ...list[index], [e.target.name]: e.target.value };
-        console.log(`Dynamic field ${field}[${index}] changed:`, list[index]);
         setFormData({ ...formData, [field]: list as any });
     } 
     
@@ -329,21 +424,18 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         if (field === 'workHistory') newItem = { company: '', position: '', startDate: '', endDate: '' };
         if (field === 'trainingCertificates') newItem = { name: '', issuer: '', issueDate: '' };
         
-        console.log(`Adding new item to ${field}:`, newItem);
         setFormData({ ...formData, [field]: [...list, newItem] as any });
     };
 
     const handleRemoveItem = (index: number, field: 'educationHistory' | 'workHistory' | 'trainingCertificates') => {
         const list = [...(formData[field] || [])];
         list.splice(index, 1);
-        console.log(`Removing item from ${field} at index ${index}`);
         setFormData({ ...formData, [field]: list as any });
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('Form submitted with data:', formData);
-        onSave(formData);
+        onSave(formData, avatarFile);
     };
 
     return (
@@ -356,13 +448,13 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
                     <fieldset className="border p-3 rounded mb-4">
                         <legend className="px-2 h6">Foto Profil</legend>
                         <div className="d-flex align-items-center gap-3">
-                            <img src={formData.avatarUrl} alt="Avatar" className="rounded-circle border border-2" width="96" height="96" />
+                            <img src={avatarPreview || formData.avatarUrl} alt="Avatar" className="rounded-circle border border-2" width="96" height="96" />
                             <div>
                                 <Form.Label htmlFor="avatarUpload" className="btn btn-sm btn-outline-secondary">
                                     <span>Ganti Foto</span>
                                 </Form.Label>
                                 <Form.Control id="avatarUpload" name="avatar" type="file" className="d-none" onChange={handleFileChange} accept="image/*" />
-                                <Form.Text className="mt-1">PNG, JPG, GIF hingga 1MB.</Form.Text>
+                                <Form.Text className="mt-1">PNG, JPG, GIF hingga 2MB.</Form.Text>
                             </div>
                         </div>
                     </fieldset>
@@ -1952,12 +2044,42 @@ const AnnouncementManagement: React.FC = () => {
 
 export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
-    const { db } = useData();
+    const { db, refreshData } = useData();
     
     if (!db) return null; // or a loading spinner
 
+    // Refresh data when dashboard is active to ensure notifications are up to date
+    useEffect(() => {
+        // Refresh immediately when dashboard becomes active
+        if (activeView === 'dashboard') {
+            refreshData();
+        }
+        
+        // Set up periodic refresh every 30 seconds when on dashboard
+        let intervalId: NodeJS.Timeout | null = null;
+        if (activeView === 'dashboard') {
+            intervalId = setInterval(() => {
+                refreshData();
+            }, 30000); // 30 seconds
+        }
+        
+        // Clean up interval on unmount or when activeView changes
+        return () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+        };
+    }, [activeView, refreshData]);
+
+    // Also refresh data when switching to the data requests view
+    useEffect(() => {
+        if (activeView === 'data-requests') {
+            refreshData();
+        }
+    }, [activeView, refreshData]);
+
     const pendingRequestsCount = useMemo(() => db.leaveRequests.filter(r => r.status === LeaveStatus.PENDING).length, [db.leaveRequests]);
-            const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status.toLowerCase() === 'pending').length, [db.dataChangeRequests]);
+    const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status.toLowerCase() === 'pending').length, [db.dataChangeRequests]);
 
     const navLinksWithBadge = useMemo(() => {
         return ADMIN_NAV_LINKS.map(link => {
@@ -1984,6 +2106,7 @@ export const AdminPage: React.FC = () => {
             case 'announcements': return <AnnouncementManagement />;
             case 'users': return <UserManagement />;
             case 'reports': return <Reports />;
+            case 'settings': return <SettingsPage />;
             default: return <AdminDashboard pendingRequestsCount={pendingRequestsCount} pendingDataChangeRequestsCount={pendingDataChangeRequestsCount} setActiveView={setActiveView}/>;
         }
     };
