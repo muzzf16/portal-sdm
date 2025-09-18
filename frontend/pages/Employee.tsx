@@ -4,7 +4,7 @@ import { Layout } from '../components/Layout';
 import { EMPLOYEE_NAV_LINKS, ICONS } from '../constants';
 import { Card, StatCard, PageTitle, Textarea, Input, Select } from '../components/ui';
 import { AuthContext } from '../App';
-import { LeaveRequest, LeaveStatus, LeaveType, Payroll, PerformanceReview, AttendanceRecord, AttendanceStatus } from '../types';
+import { LeaveRequest, LeaveStatus, LeaveType, Payroll, PerformanceReview, AttendanceRecord, AttendanceStatus, Employee } from '../types';
 import { useData } from '../context/DataContext';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -45,8 +45,7 @@ const EmployeeDashboard: React.FC<{ latestNewPayslip: Payroll | null, setActiveV
     const [leaveSummary, setLeaveSummary] = useState<LeaveSummary | null>(null);
 
     const employee = useMemo(() => {
-        if (user?.employeeDetails) return user.employeeDetails;
-        if (!user || !user.employeeId || !db) return null;
+        if (!user || !user.employeeId || !db || !db.employees) return null;
         return db.employees.find(e => e.id === user.employeeId) || null;
     }, [user, db]);
 
@@ -140,17 +139,53 @@ const DetailItem: React.FC<{ label: string; value: string | number | undefined }
 
 
 const MyProfile: React.FC = () => {
-    const { user } = useContext(AuthContext);
-    const { db } = useData();
+    const { user, updateUserAvatar } = useContext(AuthContext);
+    const { db, refreshData } = useData();
     const { addToast } = useToast();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [requestMessage, setRequestMessage] = useState('');
+    const [employee, setEmployee] = useState<Employee | null>(null);
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
-    const employee = useMemo(() => {
-        if (user?.employeeDetails) return user.employeeDetails;
-        if (!user || !user.employeeId || !db) return null;
-        return db.employees.find(e => e.id === user.employeeId) || null;
+    useEffect(() => {
+        if (user && user.employeeId && db && db.employees) {
+            const foundEmployee = db.employees.find(e => e.id === user.employeeId) || null;
+            setEmployee(foundEmployee);
+        }
     }, [user, db]);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setAvatarFile(file);
+            setAvatarPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleAvatarSave = async () => {
+        if (!avatarFile || !employee) {
+            addToast('Silakan pilih file foto baru.', 'warning');
+            return;
+        }
+        try {
+            const response = await api.uploadMyAvatar(avatarFile);
+            addToast('Foto profil berhasil diperbarui.', 'success');
+            
+            // Update avatar in auth context for immediate feedback in other components
+            if (updateUserAvatar) {
+                updateUserAvatar(response.url);
+            }
+
+            // Refresh the main data context to get all updated employee info
+            await refreshData();
+
+            setAvatarFile(null);
+            setAvatarPreview(null);
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Gagal mengunggah foto.", 'error');
+        }
+    };
 
     if (!user || !employee) return <p>Memuat profil...</p>;
     
@@ -162,6 +197,8 @@ const MyProfile: React.FC = () => {
             addToast("Permintaan berhasil dikirim ke HR.", 'success');
             setIsModalOpen(false);
             setRequestMessage('');
+            // Refresh data to ensure admin notifications update
+            await refreshData();
         } catch (error) {
             addToast(error instanceof Error ? error.message : "Gagal mengirim permintaan.", 'error');
         }
@@ -175,33 +212,48 @@ const MyProfile: React.FC = () => {
             
             <Card>
                 <div className="d-flex flex-column flex-md-row align-items-start mb-4">
-                    <img src={employee.avatarUrl} alt="Avatar" className="rounded-circle border border-2 me-md-4 mb-3 mb-md-0" width="120" height="120" />
-                    <div>
+                    <div className="position-relative">
+                        <img src={avatarPreview || employee.avatarUrl} alt="Avatar" className="rounded-circle border border-2 me-md-4 mb-3 mb-md-0" style={{ width: '120px', height: '120px', objectFit: 'cover' }} />
+                        <label htmlFor="avatar-upload" className="btn btn-sm btn-light position-absolute bottom-0 start-0 ms-3 mb-3" style={{ cursor: 'pointer' }}>
+                            <i className="bi bi-pencil-fill"></i>
+                        </label>
+                        <input type="file" id="avatar-upload" className="d-none" onChange={handleFileChange} accept="image/*" />
+                    </div>
+                    <div className="flex-grow-1">
                         <h3 className="h4 fw-bold">{user?.name || 'Karyawan'}</h3>
                         <p className="text-muted">{employee.position}</p>
                         <p className="small text-muted">{employee.department} - {employee.pangkat} ({employee.golongan})</p>
                         <span className={`badge mt-2 ${employee.isActive ? 'bg-success-subtle text-success-emphasis' : 'bg-danger-subtle text-danger-emphasis'}`}>
                             {employee.isActive ? 'Aktif' : 'Nonaktif'}
                         </span>
+                        {avatarFile && (
+                            <div className="mt-3">
+                                <Button onClick={handleAvatarSave} size="sm">Simpan Foto</Button>
+                                <Button onClick={() => { setAvatarFile(null); setAvatarPreview(null); }} variant="secondary" size="sm" className="ms-2">Batal</Button>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 <Accordion defaultActiveKey="0">
                     <Accordion.Item eventKey="0">
                         <Accordion.Header>Informasi Pekerjaan</Accordion.Header>
-                        <Accordion.Body>
+                        <Accordion.Body style={{ minHeight: '150px' }}>
                             <Row className="g-3">
                                 <Col md={4}><DetailItem label="NIP" value={employee.nip} /></Col>
                                 <Col md={4}><DetailItem label="Email" value={user?.email} /></Col>
-                                <Col md={4}><DetailItem label="Telepon" value={employee.phone} /></Col>
-                                <Col md={4}><DetailItem label="Tanggal Bergabung" value={employee.joinDate} /></Col>
+                                <Col md={4}><DetailItem label="Telepon" value={employee.phone || '-'} /></Col>
+                                <Col md={4}><DetailItem label="Tanggal Bergabung" value={employee.joinDate || '-'} /></Col>
+
+                                {/* <Col md={4}><DetailItem label="Telepon" value={employee.phone} /></Col>
+                                <Col md={4}><DetailItem label="Tanggal Bergabung" value={employee.joinDate} /></Col> */}
                                 <Col md={4}><DetailItem label="Sisa Cuti" value={`${employee?.leaveBalance || 'N/A'} hari`} /></Col>
                             </Row>
                         </Accordion.Body>
                     </Accordion.Item>
                     <Accordion.Item eventKey="1">
                         <Accordion.Header>Informasi Pribadi</Accordion.Header>
-                        <Accordion.Body>
+                        <Accordion.Body style={{ minHeight: '150px' }}>
                             <Row className="g-3">
                                 <Col md={4}><DetailItem label="Tempat, Tanggal Lahir" value={`${employee.pob}, ${employee.dob}`} /></Col>
                                 <Col md={4}><DetailItem label="Agama" value={employee.religion} /></Col>
@@ -213,28 +265,51 @@ const MyProfile: React.FC = () => {
                     </Accordion.Item>
                     <Accordion.Item eventKey="2">
                         <Accordion.Header>Riwayat Pendidikan</Accordion.Header>
-                        <Accordion.Body>
+                        <Accordion.Body style={{ minHeight: '100px' }}>
+                            {(() => { console.log("DEBUG employee data:", employee); return null })()}
+
                             <ListGroup variant="flush">
-                                {employee.educationHistory.map((edu, i) => <ListGroup.Item key={i}><strong>{edu.level} {edu.major}</strong> di {edu.institution} (Lulus {edu.graduationYear})</ListGroup.Item>)}
-                                {employee.educationHistory.length === 0 && <p className="text-muted">Tidak ada data.</p>}
+                                {employee.educationHistory && employee.educationHistory.length > 0 ? (
+                                    employee.educationHistory.map((edu, i) => (
+                                        <ListGroup.Item key={i}>
+                                            <strong>{edu.level} {edu.major}</strong> di {edu.institution} (Lulus {edu.graduationYear})
+                                        </ListGroup.Item>
+                                    ))
+                                ) : (
+                                    <p className="text-muted">Tidak ada data.</p>
+                                )}
                             </ListGroup>
                         </Accordion.Body>
                     </Accordion.Item>
                     <Accordion.Item eventKey="3">
                         <Accordion.Header>Riwayat Pekerjaan</Accordion.Header>
-                        <Accordion.Body>
+                        <Accordion.Body style={{ minHeight: '100px' }}>
                             <ListGroup variant="flush">
-                                {employee.workHistory.map((work, i) => <ListGroup.Item key={i}><strong>{work.position}</strong> di {work.company} ({work.startDate} - {work.endDate})</ListGroup.Item>)}
-                                {employee.workHistory.length === 0 && <p className="text-muted">Tidak ada data.</p>}
+                                {employee.workHistory && employee.workHistory.length > 0 ? (
+                                    employee.workHistory.map((work, i) => (
+                                        <ListGroup.Item key={i}>
+                                            <strong>{work.position}</strong> di {work.company} ({work.startDate} - {work.endDate})
+                                        </ListGroup.Item>
+                                    ))
+                                ) : (
+                                    <p className="text-muted">Tidak ada data.</p>
+                                )}
                             </ListGroup>
                         </Accordion.Body>
                     </Accordion.Item>
                     <Accordion.Item eventKey="4">
                         <Accordion.Header>Sertifikat Pelatihan</Accordion.Header>
-                        <Accordion.Body>
+                        <Accordion.Body style={{ minHeight: '100px' }}>
                             <ListGroup variant="flush">
-                                {employee.trainingCertificates.map((cert, i) => <ListGroup.Item key={i}><strong>{cert.name}</strong> dari {cert.issuer} (Diperoleh {cert.issueDate})</ListGroup.Item>)}
-                                {employee.trainingCertificates.length === 0 && <p className="text-muted">Tidak ada data.</p>}
+                                {employee.trainingCertificates && employee.trainingCertificates.length > 0 ? (
+                                    employee.trainingCertificates.map((cert, i) => (
+                                        <ListGroup.Item key={i}>
+                                            <strong>{cert.name}</strong> dari {cert.issuer} (Diperoleh {cert.issueDate})
+                                        </ListGroup.Item>
+                                    ))
+                                ) : (
+                                    <p className="text-muted">Tidak ada data.</p>
+                                )}
                             </ListGroup>
                         </Accordion.Body>
                     </Accordion.Item>
@@ -426,8 +501,7 @@ const MyLeave: React.FC = () => {
     const { addToast } = useToast();
     
     const employee = useMemo(() => {
-        if (user?.employeeDetails) return user.employeeDetails;
-        if (!user || !user.employeeId || !db) return null;
+        if (!user || !user.employeeId || !db || !db.employees) return null;
         return db.employees.find(e => e.id === user.employeeId) || null;
     }, [user, db]);
 
@@ -686,8 +760,7 @@ const MyPerformance: React.FC = () => {
     const { addToast } = useToast();
     
     const employee = useMemo(() => {
-        if (user?.employeeDetails) return user.employeeDetails;
-        if (!user || !user.employeeId || !db) return null;
+        if (!user || !user.employeeId || !db || !db.employees) return null;
         return db.employees.find(e => e.id === user.employeeId) || null;
     }, [user, db]);
 
@@ -745,8 +818,7 @@ const PayslipDetailModal: React.FC<{ payslip: Payroll; onClose: () => void }> = 
     const { db } = useData();
     
     const employee = useMemo(() => {
-        if (user?.employeeDetails) return user.employeeDetails;
-        if (!user || !user.employeeId || !db) return null;
+        if (!user || !user.employeeId || !db || !db.employees) return null;
         return db.employees.find(e => e.id === user.employeeId) || null;
     }, [user, db]);
 
@@ -755,7 +827,7 @@ const PayslipDetailModal: React.FC<{ payslip: Payroll; onClose: () => void }> = 
         doc.setProperties({ title: `Slip Gaji - ${payslip.period}` });
         doc.setFontSize(18);
         doc.setFont("helvetica", "bold");
-        doc.text("PT. MAJU BERSAMA", 105, 20, { align: "center" });
+        doc.text("PT. BPR BAPERA BATANG", 105, 20, { align: "center" });
         doc.setFontSize(14);
         doc.setFont("helvetica", "normal");
         doc.text("SLIP GAJI KARYAWAN", 105, 30, { align: "center" });
@@ -825,7 +897,7 @@ const PayslipDetailModal: React.FC<{ payslip: Payroll; onClose: () => void }> = 
             </Modal.Header>
             <Modal.Body>
                 <div className="text-center mb-4">
-                    <h3 className="h5 fw-bold">PT. MAJU BERSAMA</h3>
+                    <h3 className="h5 fw-bold">PT. BPR BAPERA BATANG</h3>
                     <p>SLIP GAJI KARYAWAN</p>
                     <p className="small text-muted">Periode: {payslip.period}</p>
                 </div>
@@ -898,8 +970,7 @@ const MyPayslips: React.FC<{ onMount: () => void }> = ({ onMount }) => {
     const { db } = useData();
     
     const employee = useMemo(() => {
-        if (user?.employeeDetails) return user.employeeDetails;
-        if (!user || !user.employeeId || !db) return null;
+        if (!user || !user.employeeId || !db || !db.employees) return null;
         return db.employees.find(e => e.id === user.employeeId) || null;
     }, [user, db]);
 
@@ -960,8 +1031,7 @@ export const EmployeePage: React.FC = () => {
     const [newPayslips, setNewPayslips] = useState<Payroll[]>([]);
 
     const employee = useMemo(() => {
-        if (user?.employeeDetails) return user.employeeDetails;
-        if (!user || !user.employeeId || !db) return null;
+        if (!user || !user.employeeId || !db || !db.employees) return null;
         return db.employees.find(e => e.id === user.employeeId) || null;
     }, [user, db]);
 

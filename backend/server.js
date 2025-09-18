@@ -4,27 +4,32 @@ const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
+const multer = require('multer');
+const jwt = require('jsonwebtoken');
 
 const app = express();
+
+// --- JWT Authentication ---
+const JWT_SECRET = 'your-secret-key'; // Use a more secure key in production
+
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token == null) return res.sendStatus(401);
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
 //const PORT = process.env.PORT || 2025;
 const PORT = process.env.PORT || 3333;
 const DB_SOURCE = "database.sqlite";
 const DB_JSON_SEED_SOURCE = path.join(__dirname, 'db.json');
 
-// --- Cuti Bersama 2024 ---
-// Sumber: SKB 3 Menteri
-const CUTI_BERSAMA_2024 = [
-    '2024-02-09', // Cuti Bersama Tahun Baru Imlek 2575 Kongzili
-    '2024-03-12', // Cuti Bersama Hari Suci Nyepi Tahun Baru Saka 1946
-    '2024-04-08', // Cuti Bersama Hari Raya Idul Fitri 1445 Hijriah
-    '2024-04-09', // Cuti Bersama Hari Raya Idul Fitri 1445 Hijriah
-    '2024-04-12', // Cuti Bersama Hari Raya Idul Fitri 1445 Hijriah
-    '2024-04-15', // Cuti Bersama Hari Raya Idul Fitri 1445 Hijriah
-    '2024-05-10', // Cuti Bersama Kenaikan Isa Al Masih
-    '2024-05-24', // Cuti Bersama Hari Raya Waisak
-    '2024-06-18', // Cuti Bersama Hari Raya Idul Adha 1445 Hijriah
-    '2024-12-26', // Cuti Bersama Hari Raya Natal
-];
+// Collective holidays are now managed in the 'collective_holidays' table.
 
 // --- Database Connection ---
 const db = new sqlite3.Database(DB_SOURCE, (err) => {
@@ -345,9 +350,11 @@ app.get('/api/employees/:id/leave-summary', async (req, res) => {
             }
         });
 
+        const nationalHolidaysCount = await dbGet("SELECT COUNT(*) as count FROM collective_holidays");
+
         const summary = {
             initialAllotment: 18,
-            nationalHolidays: CUTI_BERSAMA_2024.length,
+            nationalHolidays: nationalHolidaysCount.count,
             approvedLeaveTaken: approvedLeaveTaken,
             currentBalance: employee.leaveBalance, // The actual balance stored in DB
             calculatedRemaining: employee.leaveBalance, // Corrected: This is the true remaining balance
@@ -379,11 +386,27 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(400).json({ message: "Invalid credentials." });
         }
 
-        // Remove password from response
-        const { password: _, ...userWithoutPassword } = user;
-        console.log(`Login successful for user: ${name}`);
+        // Fetch employee details to include in the response
+        const employee = user.employeeId ? await dbGet("SELECT * FROM employees WHERE id = ?", [user.employeeId]) : null;
 
-        res.json(userWithoutPassword);
+        // Create JWT
+        const payload = {
+            id: user.id,
+            name: user.name,
+            role: user.role,
+            employeeId: user.employeeId
+        };
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+
+        console.log(`Login successful for user: ${name}`);
+        res.json({ 
+            message: "Login successful",
+            token,
+            user: {
+                ...user,
+                avatar: employee ? employee.avatarUrl : null
+            }
+        });
     } catch (err) {
         console.error("Error in /api/auth/login endpoint:", err);
         res.status(500).json({ "error": err.message });
@@ -405,7 +428,7 @@ app.post('/api/employees', async (req, res) => {
             golongan: employeeData.golongan || 'N/A',
             department: employeeData.department || 'N/A',
             joinDate: employeeData.joinDate || new Date().toISOString().split('T')[0],
-            avatarUrl: employeeData.avatarUrl || 'https://picsum.photos/id/1/200',
+            avatarUrl: employeeData.avatarUrl || '/uploads/default-avatar.png',
             leaveBalance: employeeData.leaveBalance ?? 18,
             isActive: employeeData.hasOwnProperty('isActive') ? (employeeData.isActive ? 1 : 0) : 1,
             address: employeeData.address || '',
@@ -531,8 +554,6 @@ app.put('/api/leave-requests/:id', async (req, res) => {
     }
 });
 
-const multer = require('multer');
-
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -564,6 +585,134 @@ const upload = multer({
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const logoStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        // Always name the company logo file the same way to overwrite it
+        cb(null, 'company-logo' + path.extname(file.originalname));
+    }
+});
+
+const uploadLogo = multer({
+    storage: logoStorage,
+    limits: {
+        fileSize: 2 * 1024 * 1024 // 2MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept only image files
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('File type not allowed. Only image files are allowed.'));
+        }
+    }
+});
+
+// POST upload company logo
+app.post('/api/settings/logo', uploadLogo.single('logo'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'No logo file uploaded.' });
+    }
+    console.log('API Request: POST /api/settings/logo');
+    // The file is saved by multer's diskStorage. We just need to send back a success response.
+    const logoUrl = `/uploads/${req.file.filename}`;
+    console.log(`Company logo uploaded successfully: ${logoUrl}`);
+    res.status(200).json({ message: 'Logo uploaded successfully', url: logoUrl });
+});
+
+const avatarStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'avatar-' + req.params.id + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const uploadAvatar = multer({
+    storage: avatarStorage,
+    limits: {
+        fileSize: 2 * 1024 * 1024 // 2MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('File type not allowed. Only image files are allowed.'));
+        }
+    }
+});
+
+// POST upload user avatar
+app.post('/api/employees/:id/avatar', uploadAvatar.single('avatar'), async (req, res) => {
+    const { id } = req.params;
+    if (!req.file) {
+        return res.status(400).json({ message: 'No avatar file uploaded.' });
+    }
+    console.log(`API Request: POST /api/employees/${id}/avatar`);
+    try {
+        const avatarUrl = `/uploads/${req.file.filename}`;
+        await dbRun("UPDATE employees SET avatarUrl = ? WHERE id = ?", [avatarUrl, id]);
+        console.log(`Employee ${id} avatar updated successfully: ${avatarUrl}`);
+        res.status(200).json({ message: 'Avatar updated successfully', url: avatarUrl });
+    } catch (err) {
+        console.error(`Error updating avatar for employee ${id}:`, err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+// --- Endpoint for user to upload their own avatar ---
+
+const myAvatarStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        // req.user should be available from authenticateToken middleware
+        const userId = req.user ? req.user.employeeId : 'unknown-user';
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'avatar-' + userId + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const uploadMyAvatar = multer({
+    storage: myAvatarStorage,
+    limits: {
+        fileSize: 2 * 1024 * 1024 // 2MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('File type not allowed. Only image files are allowed.'));
+        }
+    }
+});
+
+app.post('/api/me/avatar', authenticateToken, uploadMyAvatar.single('avatar'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'No avatar file uploaded.' });
+    }
+    
+    const userId = req.user.employeeId;
+    console.log(`API Request: POST /api/me/avatar for user ID: ${userId}`);
+    
+    try {
+        const avatarUrl = `/uploads/${req.file.filename}`;
+        await dbRun("UPDATE employees SET avatarUrl = ? WHERE id = ?", [avatarUrl, userId]);
+        
+        console.log(`User ${userId} avatar updated successfully: ${avatarUrl}`);
+        res.status(200).json({ message: 'Avatar updated successfully', url: avatarUrl });
+    } catch (err) {
+        console.error(`Error updating avatar for user ${userId}:`, err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
 
 // POST submit leave request with file upload
 app.post('/api/leave-requests', upload.single('supportingDocument'), async (req, res) => {
@@ -606,7 +755,12 @@ app.post('/api/attendance/clock-in', async (req, res) => {
         }
 
         const clockInTime = new Date().toLocaleTimeString('en-GB');
-        const isLate = clockInTime > '09:00:00';
+        
+        // Get default clock-in time from settings
+        const defaultClockInSetting = await dbGet("SELECT value FROM settings WHERE key = 'defaultClockIn'");
+        const defaultClockIn = defaultClockInSetting ? defaultClockInSetting.value : '09:00:00'; // Fallback to 09:00
+
+        const isLate = clockInTime > defaultClockIn;
         const newRecord = { id: `att-${Date.now()}`, employeeId, employeeName, date: today, clockIn: clockInTime, clockOut: null, status: isLate ? 'Terlambat' : 'Tepat Waktu', workDuration: null };
 
         await dbRun('INSERT INTO attendance VALUES (?,?,?,?,?,?,?,?)', Object.values(newRecord));
@@ -1025,6 +1179,97 @@ app.delete('/api/users/:id', async (req, res) => {
     } catch (err) {
         console.error(`Delete user ${id} error:`, err);
         res.status(500).json({ error: "An internal server error occurred.", details: err.message });
+    }
+});
+
+// --- Settings and Holidays API Endpoints ---
+
+// GET all settings
+app.get('/api/settings', async (req, res) => {
+    try {
+        console.log("API Request: GET /api/settings");
+        const rows = await dbAll("SELECT * FROM settings");
+        // Convert array of {key, value} to a single object {key1: value1, key2: value2}
+        const settings = rows.reduce((acc, row) => {
+            acc[row.key] = row.value;
+            return acc;
+        }, {});
+        console.log("Retrieved settings:", settings);
+        res.json(settings);
+    } catch (err) {
+        console.error("Error in /api/settings endpoint:", err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+// PUT update settings
+app.put('/api/settings', async (req, res) => {
+    const settings = req.body; // Expects an object like { defaultClockIn: '08:30' }
+    console.log("API Request: PUT /api/settings", settings);
+    try {
+        await dbRun('BEGIN TRANSACTION');
+        for (const [key, value] of Object.entries(settings)) {
+            await dbRun("UPDATE settings SET value = ? WHERE key = ?", [value, key]);
+        }
+        await dbRun('COMMIT');
+        console.log("Settings updated successfully");
+        res.json({ message: 'Settings updated successfully' });
+    } catch (err) {
+        await dbRun('ROLLBACK');
+        console.error("Error updating settings:", err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+// GET all collective holidays
+app.get('/api/holidays', async (req, res) => {
+    try {
+        console.log("API Request: GET /api/holidays");
+        const rows = await dbAll("SELECT * FROM collective_holidays ORDER BY date");
+        console.log(`Retrieved ${rows.length} collective holidays`);
+        res.json(rows);
+    } catch (err) {
+        console.error("Error in /api/holidays endpoint:", err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+// POST add a new collective holiday
+app.post('/api/holidays', async (req, res) => {
+    const { date, description } = req.body;
+    if (!date || !description) {
+        return res.status(400).json({ message: 'Date and description are required.' });
+    }
+    console.log(`API Request: POST /api/holidays`, req.body);
+    try {
+        await dbRun("INSERT INTO collective_holidays (date, description) VALUES (?, ?)", [date, description]);
+        console.log(`Collective holiday added: ${date}`);
+        res.status(201).json({ date, description });
+    } catch (err) {
+        console.error("Error adding collective holiday:", err);
+        if (err.message.includes('UNIQUE constraint failed')) {
+            res.status(409).json({ message: `Holiday on date ${date} already exists.` });
+        } else {
+            res.status(500).json({ "error": err.message });
+        }
+    }
+});
+
+// DELETE a collective holiday
+app.delete('/api/holidays/:date', async (req, res) => {
+    const { date } = req.params;
+    console.log(`API Request: DELETE /api/holidays/${date}`);
+    try {
+        const result = await dbRun("DELETE FROM collective_holidays WHERE date = ?", [date]);
+        if (result.changes === 0) {
+            console.log(`Collective holiday not found for deletion: ${date}`);
+            return res.status(404).json({ message: 'Collective holiday not found' });
+        }
+        console.log(`Collective holiday deleted: ${date}`);
+        res.json({ message: 'Collective holiday deleted successfully' });
+    } catch (err) {
+        console.error("Error deleting collective holiday:", err);
+        res.status(500).json({ "error": err.message });
     }
 });
 

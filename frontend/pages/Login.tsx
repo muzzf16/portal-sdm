@@ -20,10 +20,10 @@ export const LoginPage: React.FC = () => {
         setIsLoading(true);
         setError('');
         try {
-            const userToLogin = await api.login({ name, password });
-            if (userToLogin) {
-                login(userToLogin);
-                addToast(`Selamat datang, ${userToLogin.name}!`, 'success');
+            const loginResponse = await api.login({ name, password });
+            if (loginResponse && loginResponse.user && loginResponse.token) {
+                login(loginResponse.user, loginResponse.token);
+                addToast(`Selamat datang, ${loginResponse.user.name}!`, 'success');
                 navigate('/'); // Redirect to dashboard after login
             }
         } catch (error) {

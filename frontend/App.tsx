@@ -11,14 +11,16 @@ import { LandingPage } from './pages/Landing';
 
 interface AuthContextType {
     user: User | null;
-    login: (user: User) => void;
+    login: (user: User, token: string) => void;
     logout: () => void;
+    updateUserAvatar: (avatarUrl: string) => void;
 }
 
 export const AuthContext = createContext<AuthContextType>({
     user: null,
     login: () => {},
     logout: () => {},
+    updateUserAvatar: () => {},
 });
 
 const App: React.FC = () => {
@@ -27,27 +29,28 @@ const App: React.FC = () => {
         return storedUser ? JSON.parse(storedUser) : null;
     });
 
-    const login = useCallback(async (userData: User) => {
-        // If the user has an employeeId but no employeeDetails, fetch the employee data
-        if (userData.employeeId && !userData.employeeDetails) {
-            try {
-                // We would need to fetch the employee data from the API here
-                // For now, we'll rely on the DataContext to provide this data
-            } catch (error) {
-                console.error("Failed to fetch employee data:", error);
-            }
-        }
-        
+    const login = useCallback(async (userData: User, token: string) => {
         localStorage.setItem('hrms_user', JSON.stringify(userData));
+        localStorage.setItem('token', token);
         setUser(userData);
     }, []);
 
     const logout = useCallback(() => {
         localStorage.removeItem('hrms_user');
+        localStorage.removeItem('token');
         setUser(null);
     }, []);
 
-    const authContextValue = useMemo(() => ({ user, login, logout }), [user, login, logout]);
+    const updateUserAvatar = useCallback((avatarUrl: string) => {
+        setUser(currentUser => {
+            if (!currentUser) return null;
+            const updatedUser = { ...currentUser, avatar: avatarUrl };
+            localStorage.setItem('hrms_user', JSON.stringify(updatedUser));
+            return updatedUser;
+        });
+    }, []);
+
+    const authContextValue = useMemo(() => ({ user, login, logout, updateUserAvatar }), [user, login, logout, updateUserAvatar]);
 
     const renderAuthenticatedApp = () => {
         if (!user) {

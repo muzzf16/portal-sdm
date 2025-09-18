@@ -3,11 +3,21 @@ import { Role, User, Employee, PayrollInfo, LeaveRequest, PerformanceReview, Dat
 const API_BASE_URL = '/api'; // Menggunakan proxy relatif
 
 const handleResponse = async (response: Response) => {
+    if (response.status === 401 || response.status === 403) {
+        // Handle token-related errors, e.g., by logging out the user
+        throw new Error('Sesi Anda telah berakhir. Silakan login kembali.');
+    }
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Terjadi kesalahan pada server');
     }
-    return response.json();
+    // Handle responses that might not have a JSON body
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+        return response.json();
+    } else {
+        return response.text(); // Or handle as needed
+    }
 };
 
 const api = {
@@ -22,7 +32,7 @@ const api = {
 
     // --- Data Fetching ---
     getFullDatabase: () => {
-        return fetch(`${API_BASE_URL}/data`).then(handleResponse);
+        return fetch(`${API_BASE_URL}/data?t=${new Date().getTime()}`).then(handleResponse);
     },
 
     getLeaveSummary: (employeeId: string) => {
@@ -98,6 +108,30 @@ const api = {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payrollInfo),
+        }).then(handleResponse);
+    },
+
+    uploadAvatar: (employeeId: string, avatarFile: File) => {
+        const formData = new FormData();
+        formData.append('avatar', avatarFile);
+
+        return fetch(`${API_BASE_URL}/employees/${employeeId}/avatar`, {
+            method: 'POST',
+            body: formData,
+        }).then(handleResponse);
+    },
+
+    uploadMyAvatar: (avatarFile: File) => {
+        const formData = new FormData();
+        formData.append('avatar', avatarFile);
+        const token = localStorage.getItem('token');
+
+        return fetch(`${API_BASE_URL}/me/avatar`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
         }).then(handleResponse);
     },
     
@@ -197,6 +231,47 @@ const api = {
     deleteAnnouncement: (id: string) => {
         return fetch(`${API_BASE_URL}/announcements/${id}`, {
             method: 'DELETE',
+        }).then(handleResponse);
+    },
+
+    // --- Settings & Holidays ---
+    getSettings: (): Promise<{ [key: string]: string }> => {
+        return fetch(`${API_BASE_URL}/settings`).then(handleResponse);
+    },
+
+    updateSettings: (settings: { [key: string]: string }) => {
+        return fetch(`${API_BASE_URL}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings),
+        }).then(handleResponse);
+    },
+
+    getHolidays: (): Promise<{ date: string, description: string }[]> => {
+        return fetch(`${API_BASE_URL}/holidays`).then(handleResponse);
+    },
+
+    addHoliday: (holiday: { date: string, description: string }) => {
+        return fetch(`${API_BASE_URL}/holidays`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(holiday),
+        }).then(handleResponse);
+    },
+
+    deleteHoliday: (date: string) => {
+        return fetch(`${API_BASE_URL}/holidays/${date}`, {
+            method: 'DELETE',
+        }).then(handleResponse);
+    },
+
+    uploadCompanyLogo: (logoFile: File) => {
+        const formData = new FormData();
+        formData.append('logo', logoFile);
+
+        return fetch(`${API_BASE_URL}/settings/logo`, {
+            method: 'POST',
+            body: formData,
         }).then(handleResponse);
     },
 };

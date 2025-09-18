@@ -251,10 +251,11 @@ const EmployeeManagement: React.FC = () => {
         try {
             let updatedData = { ...data };
 
-            // First, handle avatar upload if a new file is present and it's an existing employee
+            // Handle avatar upload first and get the new URL
             if (avatarFile && updatedData.id) {
-                await api.uploadAvatar(updatedData.id, avatarFile);
-                addToast('Foto profil berhasil diunggah. Perubahan akan terlihat setelah data dimuat ulang.', 'info');
+                const uploadResponse = await api.uploadAvatar(updatedData.id, avatarFile);
+                updatedData.avatarUrl = uploadResponse.url; // Update the data object with the new URL
+                addToast('Foto profil berhasil diunggah.', 'info');
             }
 
             // Then, save the rest of the employee data

@@ -1,5 +1,6 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useMemo } from 'react';
 import { AuthContext } from '../App';
+import { useData } from '../context/DataContext';
 import { Nav, Navbar, Container, Dropdown, Badge } from 'react-bootstrap';
 
 interface NavLinkData {
@@ -16,43 +17,70 @@ interface LayoutProps {
     children: React.ReactNode;
 }
 
-const Sidebar: React.FC<{ navLinks: NavLinkData[], activeView: string, setActiveView: (view: string) => void, isSidebarOpen: boolean }> = ({ navLinks, activeView, setActiveView, isSidebarOpen }) => (
-    <Nav as="aside" className={`sidebar vh-100 d-flex flex-column bg-dark text-white p-2 ${isSidebarOpen ? '' : 'collapsed'}`}>
-        <Navbar.Brand href="#" className="d-flex align-items-center justify-content-center my-3 text-white text-decoration-none">
-            <i className="bi bi-buildings-fill fs-4"></i>
-            <span className="ms-2 fs-5 fw-bold link-text">HRMS</span>
-        </Navbar.Brand>
-        <hr className="text-secondary"/>
-        <Nav variant="pills" className="flex-column" as="nav">
-            {navLinks.map((link) => (
-                <Nav.Item key={link.name}>
-                    <Nav.Link
-                        href="#"
-                        active={activeView === link.view}
-                        onClick={(e) => { e.preventDefault(); setActiveView(link.view); }}
-                        className="d-flex align-items-center text-white"
-                    >
-                        <span className="position-relative">
-                            {link.icon}
-                            {link.badge && link.badge > 0 && !isSidebarOpen && (
-                                <Badge pill bg="danger" className="position-absolute top-0 start-100 translate-middle p-1 border border-light rounded-circle icon-badge"></Badge>
+const Sidebar: React.FC<{ navLinks: NavLinkData[], activeView: string, setActiveView: (view: string) => void, isSidebarOpen: boolean }> = ({ navLinks, activeView, setActiveView, isSidebarOpen }) => {
+    const [logoExists, setLogoExists] = useState(true);
+
+    const handleLogoError = () => {
+        setLogoExists(false);
+    };
+
+    return (
+        <Nav as="aside" className={`sidebar vh-100 d-flex flex-column bg-dark text-white p-2 ${isSidebarOpen ? '' : 'collapsed'}`}>
+            <Navbar.Brand href="#" className="d-flex align-items-center justify-content-center my-3 text-white text-decoration-none" style={{ height: '50px' }}>
+                {logoExists ? (
+                    <img 
+                        src={`/uploads/company-logo.png?t=${new Date().getTime()}`}
+                        alt="Company Logo" 
+                        style={{ height: '40px', maxHeight: '40px', width: 'auto' }} 
+                        onError={handleLogoError}
+                    />
+                ) : (
+                    <>
+                        <i className="bi bi-buildings-fill fs-4"></i>
+                        {isSidebarOpen && <span className="ms-2 fs-5 fw-bold link-text">HRMS</span>}
+                    </>
+                )}
+            </Navbar.Brand>
+            <hr className="text-secondary"/>
+            <Nav variant="pills" className="flex-column" as="nav">
+                {navLinks.map((link) => (
+                    <Nav.Item key={link.name}>
+                        <Nav.Link
+                            href="#"
+                            active={activeView === link.view}
+                            onClick={(e) => { e.preventDefault(); setActiveView(link.view); }}
+                            className="d-flex align-items-center text-white"
+                        >
+                            <span className="position-relative">
+                                {link.icon}
+                                {link.badge && link.badge > 0 && !isSidebarOpen && (
+                                    <Badge pill bg="danger" className="position-absolute top-0 start-100 translate-middle p-1 border border-light rounded-circle icon-badge"></Badge>
+                                )}
+                            </span>
+                            <span className="ms-3 link-text">{link.name}</span>
+                            {link.badge && link.badge > 0 && isSidebarOpen && (
+                                <Badge pill bg="danger" className="badge">
+                                    {link.badge}
+                                </Badge>
                             )}
-                        </span>
-                        <span className="ms-3 link-text">{link.name}</span>
-                        {link.badge && link.badge > 0 && isSidebarOpen && (
-                            <Badge pill bg="danger" className="badge">
-                                {link.badge}
-                            </Badge>
-                        )}
-                    </Nav.Link>
-                </Nav.Item>
-            ))}
+                        </Nav.Link>
+                    </Nav.Item>
+                ))}
+            </Nav>
         </Nav>
-    </Nav>
-);
+    );
+};
 
 const Header: React.FC<{ toggleSidebar: () => void }> = ({ toggleSidebar }) => {
     const { user, logout } = useContext(AuthContext);
+    const { db } = useData();
+
+    const employee = useMemo(() => {
+        if (!user || !user.employeeId || !db || !db.employees) return null;
+        return db.employees.find(e => e.id === user.employeeId) || null;
+    }, [user, db]);
+
+    const avatarUrl = employee?.avatarUrl || 'https://picsum.photos/200';
 
     return (
         <Navbar bg="white" expand="lg" className="shadow-sm">
@@ -65,7 +93,7 @@ const Header: React.FC<{ toggleSidebar: () => void }> = ({ toggleSidebar }) => {
                 <Nav className="ms-auto">
                     <Dropdown align="end">
                         <Dropdown.Toggle variant="light" id="dropdown-user">
-                            <img src={user?.employeeDetails?.avatarUrl} alt="User Avatar" className="rounded-circle me-2" style={{ width: '32px', height: '32px' }} />
+                            <img src={avatarUrl} alt="User Avatar" className="rounded-circle me-2" style={{ width: '32px', height: '32px' }} />
                             {user?.name}
                         </Dropdown.Toggle>
                         <Dropdown.Menu>
