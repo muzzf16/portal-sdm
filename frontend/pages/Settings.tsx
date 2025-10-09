@@ -49,7 +49,7 @@ const SettingsPage = () => {
     const handleSaveSettings = async () => {
         try {
             await api.updateSettings(settings);
-            addToast('Pengaturan jam kerja berhasil disimpan', 'success');
+            addToast('Pengaturan berhasil disimpan', 'success');
         } catch (error) {
             addToast(error instanceof Error ? error.message : 'Gagal menyimpan pengaturan', 'error');
         }
@@ -59,6 +59,7 @@ const SettingsPage = () => {
         const { name, value } = e.target;
         setNewHoliday(prev => ({ ...prev, [name]: value }));
     };
+
 
     const handleAddHoliday = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -154,6 +155,23 @@ const SettingsPage = () => {
             </Card>
 
             <Card className="mb-4">
+                <h3 className="card-title h5">Pengaturan Notifikasi</h3>
+                <p className="card-text text-muted">Atur pengingat dan notifikasi sistem.</p>
+                <div className="row g-3">
+                    <div className="col-md-6">
+                        <Input
+                            label="Notifikasi Kenaikan Pangkat (Hari Sebelum)"
+                            type="number"
+                            name="promotionNotificationDays"
+                            value={settings.promotionNotificationDays || ''}
+                            onChange={handleSettingsChange}
+                            helperText="Notifikasi akan dibuat beberapa hari sebelum tanggal kenaikan pangkat."
+                        />
+                    </div>
+                </div>
+            </Card>
+
+            <Card className="mb-4">
                 <h3 className="card-title h5">Pengaturan Jam Kerja</h3>
                 <p className="card-text text-muted">Atur jam masuk dan keluar default untuk perhitungan keterlambatan.</p>
                 <div className="row g-3">
@@ -177,7 +195,7 @@ const SettingsPage = () => {
                     </div>
                 </div>
                 <div className="mt-3">
-                    <Button onClick={handleSaveSettings}>Simpan Pengaturan Jam</Button>
+                    <Button onClick={handleSaveSettings}>Simpan Semua Pengaturan</Button>
                 </div>
             </Card>
 

@@ -259,21 +259,12 @@ const api = {
         }).then(handleResponse);
     },
 
-    deleteHoliday: (date: string) => {
-        return fetch(`${API_BASE_URL}/holidays/${date}`, {
-            method: 'DELETE',
-        }).then(handleResponse);
-    },
+    deleteHoliday: (date: string) => del(`/holidays/${date}`),
 
-    uploadCompanyLogo: (logoFile: File) => {
-        const formData = new FormData();
-        formData.append('logo', logoFile);
-
-        return fetch(`${API_BASE_URL}/settings/logo`, {
-            method: 'POST',
-            body: formData,
-        }).then(handleResponse);
-    },
+    // Notifications
+    getNotifications: () => get('/notifications'),
+    getUnreadNotifications: () => get('/notifications/unread'),
+    markNotificationAsRead: (id: string) => put(`/notifications/${id}/read`, {}),
 };
 
 export default api;

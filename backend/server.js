@@ -1273,6 +1273,102 @@ app.delete('/api/holidays/:date', async (req, res) => {
     }
 });
 
+// --- Notification Endpoints ---
+
+// GET all notifications for the logged-in user
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+        const employeeId = req.user.employeeId;
+        if (!employeeId) {
+            return res.status(400).json({ message: "User is not an employee." });
+        }
+        console.log(`API Request: GET /api/notifications for employeeId: ${employeeId}`);
+        const notifications = await dbAll("SELECT * FROM notifications WHERE employeeId = ? ORDER BY createdAt DESC", [employeeId]);
+        res.json(notifications);
+    } catch (err) {
+        console.error("Error in /api/notifications endpoint:", err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+// GET unread notifications for the logged-in user
+app.get('/api/notifications/unread', authenticateToken, async (req, res) => {
+    try {
+        const employeeId = req.user.employeeId;
+        if (!employeeId) {
+            return res.status(400).json({ message: "User is not an employee." });
+        }
+        console.log(`API Request: GET /api/notifications/unread for employeeId: ${employeeId}`);
+        const notifications = await dbAll("SELECT * FROM notifications WHERE employeeId = ? AND isRead = 0 ORDER BY createdAt DESC", [employeeId]);
+        res.json(notifications);
+    } catch (err) {
+        console.error("Error in /api/notifications/unread endpoint:", err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+
+// PUT mark a notification as read
+app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const employeeId = req.user.employeeId;
+        console.log(`API Request: PUT /api/notifications/${id}/read for employeeId: ${employeeId}`);
+        
+        const result = await dbRun("UPDATE notifications SET isRead = 1 WHERE id = ? AND employeeId = ?", [id, employeeId]);
+
+        if (result.changes === 0) {
+            return res.status(404).json({ message: "Notification not found or you don't have permission to update it." });
+        }
+        
+        res.json({ message: "Notification marked as read." });
+    } catch (err) {
+        console.error("Error in /api/notifications/:id/read endpoint:", err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+
+// --- Scheduled Jobs ---
+const checkUpcomingPromotions = async () => {
+    console.log('Running scheduled job: checkUpcomingPromotions');
+    try {
+        const setting = await dbGet("SELECT value FROM settings WHERE key = 'promotionNotificationDays'");
+        const daysBefore = setting ? parseInt(setting.value, 10) : 30;
+
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + daysBefore);
+        const targetDateString = targetDate.toISOString().split('T')[0];
+
+        const employees = await dbAll("SELECT id, employeeName, nextPromotionDate FROM employees WHERE nextPromotionDate = ?", [targetDateString]);
+
+        if (employees.length > 0) {
+            console.log(`Found ${employees.length} employees with upcoming promotions.`);
+            await dbRun('BEGIN TRANSACTION');
+            for (const emp of employees) {
+                const notificationId = `notif-${Date.now()}-${emp.id}`;
+                const message = `Kenaikan pangkat berkala untuk ${emp.employeeName} dijadwalkan pada ${emp.nextPromotionDate}.`;
+                await dbRun(
+                    "INSERT INTO notifications (id, employeeId, employeeName, message, type, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
+                    [notificationId, emp.id, emp.employeeName, message, 'PROMOTION', new Date().toISOString()]
+                );
+            }
+            await dbRun('COMMIT');
+        } else {
+            console.log('No upcoming promotions found within the notification window.');
+        }
+    } catch (error) {
+        console.error('Error in checkUpcomingPromotions job:', error);
+        // If in a transaction, try to roll back
+        try {
+            await dbRun('ROLLBACK');
+        } catch (rbError) {
+            // Ignore rollback error
+        }
+    }
+};
+
+
 // Fallback to index.html for SPA routing
 app.get('*', (req, res) => {
     if (!req.originalUrl.startsWith('/api/')) {
@@ -1286,4 +1382,12 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server Sistem Manajemen SDM berjalan di http://localhost:${PORT}`);
     console.log(`Database file is at: ${path.join(__dirname, DB_SOURCE)}`);
     console.log('Server started successfully with comprehensive API logging enabled');
+
+    // Schedule the job to run once every 24 hours
+    // setInterval(checkUpcomingPromotions, 24 * 60 * 60 * 1000);
+    // For demonstration, run it every 1 minute
+    setInterval(checkUpcomingPromotions, 60 * 1000);
+    console.log('Scheduled job "checkUpcomingPromotions" will run every 1 minute.');
+    // Run it once on startup as well
+    checkUpcomingPromotions();
 });

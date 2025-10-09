@@ -91,6 +91,36 @@ export const Textarea: React.FC<TextareaProps> = ({ label, id, size, ...props })
     </Form.Group>
 );
 
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'danger';
+  size?: 'sm' | 'lg';
+}
+
+export const Button: React.FC<ButtonProps> = ({ children, className, variant = 'primary', size, ...props }) => {
+  const sizeClasses = {
+    sm: 'px-2 py-1 text-sm',
+    lg: 'px-4 py-2 text-lg',
+  };
+
+  const variantClasses = {
+    primary: 'bg-accent hover:bg-accent-hover text-white font-bold rounded',
+    secondary: 'bg-gray-500 hover:bg-gray-600 text-white font-bold rounded',
+    danger: 'bg-red-500 hover:bg-red-600 text-white font-bold rounded',
+  };
+
+  const baseClasses = 'py-2 px-4 focus:outline-none focus:shadow-outline disabled:opacity-50';
+
+  return (
+    <button
+      className={`${baseClasses} ${variantClasses[variant]} ${size ? sizeClasses[size] : ''} ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};
+
+
 export interface ToastMessage {
     id: number;
     message: string;
