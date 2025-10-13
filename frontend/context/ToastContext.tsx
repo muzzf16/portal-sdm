@@ -18,18 +18,22 @@ export const useToast = () => {
 export const ToastProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+    const removeToast = useCallback((id: number) => {
+        setToasts(toasts => toasts.filter(toast => toast.id !== id));
+    }, []);
+
     const addToast = useCallback((message: string, type: ToastMessage['type']) => {
         const id = Date.now();
         setToasts(prevToasts => [...prevToasts, { id, message, type }]);
         setTimeout(() => {
-            setToasts(prevToasts => prevToasts.filter(toast => toast.id !== id));
+            removeToast(id);
         }, 5000);
-    }, []);
+    }, [removeToast]);
 
     return (
         <ToastContext.Provider value={{ addToast }}>
             {children}
-            <div className="fixed bottom-5 right-5 z-[100] space-y-2">
+            <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 100 }}>
                 {toasts.map((toast) => (
                     <Toast key={toast.id} {...toast} />
                 ))}

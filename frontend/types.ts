@@ -168,3 +168,11 @@ export interface DataChangeRequest {
     message: string;
     status: 'Pending' | 'Approved' | 'Rejected';
 }
+
+export interface Announcement {
+    id: string;
+    title: string;
+    message: string;
+    createdAt: string;
+    author?: string;
+}

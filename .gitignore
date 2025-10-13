@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# User-uploaded content
+backend/uploads/avatar-*
+backend/uploads/document-*
+
+# Database file
+backend/database.sqlite

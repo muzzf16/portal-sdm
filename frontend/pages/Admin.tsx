@@ -1,69 +1,57 @@
-import React, { useState, useMemo, Fragment, useContext } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React, { useState, useMemo, Fragment, useContext, useEffect } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Layout } from '../components/Layout';
 import { ADMIN_NAV_LINKS, ICONS, attendanceData, GOLONGAN_OPTIONS } from '../constants';
-import { Card, StatCard, Modal, Button, Input, Select, PageTitle, Textarea } from '../components/ui';
-import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus, DataChangeRequest } from '../types';
+import { Card, StatCard, PageTitle, Textarea, Input, Select } from '../components/ui';
+import { Employee, LeaveRequest, LeaveStatus, MaritalStatus, Education, WorkExperience, Certificate, User, Role, PayrollInfo, PayComponent, PerformanceReview, KPI, AttendanceRecord, AttendanceStatus, DataChangeRequest, Announcement } from '../types';
 import { useData } from '../context/DataContext';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { AuthContext } from '../App';
+import { Modal, Button, Alert, Form } from 'react-bootstrap';
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import SettingsPage from './Settings';
 
 const NewLeaveRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
-    const [isVisible, setIsVisible] = useState(true);
+    const [show, setShow] = useState(true);
 
-    if (!isVisible || count === 0) {
+    if (!show || count === 0) {
         return null;
     }
 
     return (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mb-6 rounded-md shadow-sm flex justify-between items-center" role="alert">
-            <div>
-                <p className="font-bold">Notifikasi Pengajuan Baru</p>
-                <p>Anda memiliki {count} pengajuan cuti yang menunggu persetujuan.</p>
+        <Alert variant="warning" onClose={() => setShow(false)} dismissible>
+            <div className="d-flex justify-content-between align-items-center">
+                <div>
+                    <Alert.Heading>Notifikasi Pengajuan Baru</Alert.Heading>
+                    <p className="mb-0">Anda memiliki {count} pengajuan cuti yang menunggu persetujuan.</p>
+                </div>
+                <Button onClick={onViewClick} variant="primary">Lihat Pengajuan</Button>
             </div>
-            <div className="flex items-center">
-                 <Button onClick={onViewClick} className="mr-4 bg-yellow-500 hover:bg-yellow-600 focus:ring-yellow-400 text-white text-sm">
-                    Lihat Pengajuan
-                </Button>
-                <button onClick={() => setIsVisible(false)} className="text-yellow-800 hover:text-yellow-900 p-1 rounded-full hover:bg-yellow-200">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-        </div>
+        </Alert>
     );
 };
 
 const NewDataChangeRequestAlert: React.FC<{ count: number; onViewClick: () => void }> = ({ count, onViewClick }) => {
-    const [isVisible, setIsVisible] = useState(true);
+    const [show, setShow] = useState(true);
 
-    if (!isVisible || count === 0) {
+    if (!show || count === 0) {
         return null;
     }
 
     return (
-        <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-4 mb-6 rounded-md shadow-sm flex justify-between items-center" role="alert">
-            <div>
-                <p className="font-bold">Notifikasi Perubahan Data</p>
-                <p>Anda memiliki {count} permintaan perubahan data yang menunggu persetujuan.</p>
+        <Alert variant="info" onClose={() => setShow(false)} dismissible>
+            <div className="d-flex justify-content-between align-items-center">
+                <div>
+                    <Alert.Heading>Notifikasi Perubahan Data</Alert.Heading>
+                    <p className="mb-0">Anda memiliki {count} permintaan perubahan data yang menunggu persetujuan.</p>
+                </div>
+                <Button onClick={onViewClick} variant="primary">Lihat Permintaan</Button>
             </div>
-            <div className="flex items-center">
-                 <Button onClick={onViewClick} className="mr-4 bg-blue-500 hover:bg-blue-600 focus:ring-blue-400 text-white text-sm">
-                    Lihat Permintaan
-                </Button>
-                <button onClick={() => setIsVisible(false)} className="text-blue-800 hover:text-blue-900 p-1 rounded-full hover:bg-blue-200">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-        </div>
+        </Alert>
     );
 };
 
@@ -71,19 +59,129 @@ const NewDataChangeRequestAlert: React.FC<{ count: number; onViewClick: () => vo
 const AdminDashboard: React.FC<{ pendingRequestsCount: number; pendingDataChangeRequestsCount: number; setActiveView: (view: string) => void }> = ({ pendingRequestsCount, pendingDataChangeRequestsCount, setActiveView }) => {
     const { db } = useData();
     if (!db) return null;
+
+    const genderData = useMemo(() => {
+        const counts = db.employees.reduce((acc, emp) => {
+            const gender = emp.gender || 'Tidak Diketahui';
+            acc[gender] = (acc[gender] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    }, [db.employees]);
+
+    const educationData = useMemo(() => {
+        const counts = db.employees.reduce((acc, emp) => {
+            if (emp.educationHistory && emp.educationHistory.length > 0) {
+                const highestEdu = emp.educationHistory[emp.educationHistory.length - 1];
+                const level = highestEdu.level || 'Lainnya';
+                acc[level] = (acc[level] || 0) + 1;
+            } else {
+                acc['Belum Ada Data'] = (acc['Belum Ada Data'] || 0) + 1;
+            }
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    }, [db.employees]);
+
+    const COLORS = ['#0d6efd', '#ffc107', '#dc3545', '#198754', '#6f42c1', '#fd7e14'];
+
+        const renderCustomizedLabel = (props: any) => {
+        const { cx, cy, midAngle, innerRadius, outerRadius, percent, textAnchor } = props;
+
+        if (cx === undefined || cy === undefined || midAngle === undefined || innerRadius === undefined || outerRadius === undefined || percent === undefined) {
+            return null;
+        }
+
+        const RADIAN = Math.PI / 180;
+        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+        const x = cx + radius * Math.cos(-midAngle * RADIAN);
+        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+        return (
+            <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
+                {`${(percent * 100).toFixed(0)}%`}
+            </text>
+        );
+    };
+
+
     return (
     <div>
         <NewLeaveRequestAlert count={pendingRequestsCount} onViewClick={() => setActiveView('leaves')} />
         <NewDataChangeRequestAlert count={pendingDataChangeRequestsCount} onViewClick={() => setActiveView('data-requests')} />
         <PageTitle title="Dasbor Admin" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <StatCard title="Total Karyawan" value={db.employees.length} icon={ICONS.employees} color="bg-blue-100 text-blue-600" />
-            <StatCard title="Cuti Hari Ini" value="3" icon={ICONS.leave} color="bg-yellow-100 text-yellow-600" />
-            <StatCard title="Pengajuan Tertunda" value={pendingRequestsCount} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>} color="bg-orange-100 text-orange-600" />
-            <StatCard title="Karyawan Baru (Bulan)" value="2" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" /></svg>} color="bg-green-100 text-green-600" />
+        <div className="row g-4 mb-4">
+            <div className="col-md-6 col-xl-3">
+                <StatCard title="Total Karyawan" value={db.employees.length} icon={ICONS.employees} color="bg-primary bg-opacity-10 text-primary" />
+            </div>
+            <div className="col-md-6 col-xl-3">
+                <StatCard title="Cuti Hari Ini" value="3" icon={ICONS.leave} color="bg-warning bg-opacity-10 text-warning" />
+            </div>
+            <div className="col-md-6 col-xl-3">
+                <StatCard title="Pengajuan Tertunda" value={pendingRequestsCount} icon={<i className="bi bi-hourglass-split fs-4"></i>} color="bg-danger bg-opacity-10 text-danger" />
+            </div>
+            <div className="col-md-6 col-xl-3">
+                <StatCard title="Karyawan Baru (Bulan)" value="2" icon={<i className="bi bi-person-plus-fill fs-4"></i>} color="bg-success bg-opacity-10 text-success" />
+            </div>
         </div>
+
+        <div className="row g-4 mb-4">
+            <div className="col-md-6">
+                <Card>
+                    <h2 className="card-title">Distribusi Gender</h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie
+                                data={genderData}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={renderCustomizedLabel}
+                                outerRadius={100}
+                                fill="#8884d8"
+                                dataKey="value"
+                                nameKey="name"
+                            >
+                                {genderData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </Card>
+            </div>
+            <div className="col-md-6">
+                <Card>
+                    <h2 className="card-title">Tingkat Pendidikan</h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie
+                                data={educationData}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={renderCustomizedLabel}
+                                outerRadius={100}
+                                fill="#8884d8"
+                                dataKey="value"
+                                nameKey="name"
+                            >
+                                {educationData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </Card>
+            </div>
+        </div>
+
         <Card>
-            <h2 className="text-xl font-semibold mb-4 text-gray-700">Kehadiran Mingguan</h2>
+            <h2 className="card-title">Kehadiran Mingguan</h2>
              <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={attendanceData}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -91,9 +189,9 @@ const AdminDashboard: React.FC<{ pendingRequestsCount: number; pendingDataChange
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="Hadir" fill="#3b82f6" />
-                    <Bar dataKey="Absen" fill="#ef4444" />
-                    <Bar dataKey="Cuti" fill="#f59e0b" />
+                    <Bar dataKey="Hadir" fill="#0d6efd" />
+                    <Bar dataKey="Absen" fill="#dc3545" />
+                    <Bar dataKey="Cuti" fill="#ffc107" />
                 </BarChart>
             </ResponsiveContainer>
         </Card>
@@ -101,10 +199,10 @@ const AdminDashboard: React.FC<{ pendingRequestsCount: number; pendingDataChange
 )};
 
 const allPositions = [
-    'Direktur Utama', 'Direktur umum/operasional', 'Komisaris Utama', 'Komisaris', 
-    'PE Pelayanan/Kabid Pelayanan', 'PE Manrisk/Kabid Manrisk', 'SPI', 'PE Umum/Kabid Umum', 
-    'Kasubid Kredit', 'Kasubid Pemasaran', 'Kasubid Dana', 'Kasubid Pelayanan', 
-    'Kasubid Pembinaan Nasabah', 'Kasubid Pelaporan', 'Kepala Kantor Kas', 'Staf Kredit', 
+    'Direktur Utama', 'Direktur umum/operasional', 'Komisaris Utama', 'Komisaris',
+    'PE Pelayanan/Kabid Pelayanan', 'PE Manrisk/Kabid Manrisk', 'SPI', 'PE Umum/Kabid Umum',
+    'Kasubid Kredit', 'Kasubid Pemasaran', 'Kasubid Dana', 'Kasubid Pelayanan',
+    'Kasubid Pembinaan Nasabah', 'Kasubid Pelaporan', 'Kepala Kantor Kas', 'Staf Kredit',
     'Staf Dana', 'Staf IT/Pelaporan', 'Satpam', 'OB', 'Magang', 'Kontrak', 'Teller', 'Customer Service'
 ];
 
@@ -148,16 +246,29 @@ const EmployeeManagement: React.FC = () => {
         setSelectedEmployeeForDetails(null);
     }
     
-    const handleSave = async (data: Partial<Employee> & { name: string; email: string }) => {
+    const handleSave = async (data: Partial<Employee> & { name: string; email: string }, avatarFile: File | null) => {
         setIsLoading(true);
         try {
-            if (data.id) { // Edit
-                await api.updateEmployee(data.id, data);
+            let updatedData = { ...data };
+
+            // Handle avatar upload first and get the new URL
+            if (avatarFile && updatedData.id) {
+                const uploadResponse = await api.uploadAvatar(updatedData.id, avatarFile);
+                updatedData.avatarUrl = uploadResponse.url; // Update the data object with the new URL
+                addToast('Foto profil berhasil diunggah.', 'info');
+            }
+
+            // Then, save the rest of the employee data
+            if (updatedData.id) { // Edit
+                await api.updateEmployee(updatedData.id, updatedData);
                 addToast('Data karyawan berhasil diperbarui', 'success');
             } else { // Add
-                await api.addEmployee(data);
+                // Note: Avatar for new employees is not uploaded here. 
+                // The backend assigns a default. It can be changed after creation.
+                await api.addEmployee(updatedData);
                 addToast('Karyawan baru berhasil ditambahkan', 'success');
             }
+            
             await refreshData();
             closeFormModal();
         } catch (error) {
@@ -171,7 +282,6 @@ const EmployeeManagement: React.FC = () => {
     const filteredEmployees = useMemo(() => {
         return employees.filter(emp => {
             const user = users.find(u => u.employeeDetails?.id === emp.id);
-            // Filter out employees without corresponding users
             if (!user) return false;
             
             const name = user?.name || '';
@@ -187,53 +297,61 @@ const EmployeeManagement: React.FC = () => {
             <PageTitle title="Manajemen Karyawan">
                 <Button onClick={() => openFormModal()}>Tambah Karyawan Baru</Button>
             </PageTitle>
-            <Card className="mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Input label="Cari Nama / NIP" placeholder="Ketik untuk mencari..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                    <Select label="Filter Jabatan" value={positionFilter} onChange={e => setPositionFilter(e.target.value)}>
-                        <option value="all">Semua Jabatan</option>
-                        {allPositions.map(pos => <option key={pos} value={pos}>{pos}</option>)}
-                    </Select>
-                    <Select label="Filter Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                        <option value="all">Semua Status</option>
-                        <option value="active">Aktif</option>
-                        <option value="inactive">Nonaktif</option>
-                    </Select>
-                </div>
+            <Card className="mb-4">
+                <Form>
+                    <div className="row g-3">
+                        <div className="col-md-4"><Input label="Cari Nama / NIP" placeholder="Ketik untuk mencari..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+                        <div className="col-md-4">
+                            <Select label="Filter Jabatan" value={positionFilter} onChange={e => setPositionFilter(e.target.value)}>
+                                <option value="all">Semua Jabatan</option>
+                                {allPositions.map(pos => <option key={pos} value={pos}>{pos}</option>)}
+                            </Select>
+                        </div>
+                        <div className="col-md-4">
+                            <Select label="Filter Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                                <option value="all">Semua Status</option>
+                                <option value="active">Aktif</option>
+                                <option value="inactive">Nonaktif</option>
+                            </Select>
+                        </div>
+                    </div>
+                </Form>
             </Card>
             <Card>
-                <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="bg-gray-100">
-                            <th className="p-3">Karyawan</th>
-                            <th className="p-3">NIP</th>
-                            <th className="p-3">Jabatan</th>
-                            <th className="p-3">Departemen</th>
-                            <th className="p-3">Status</th>
-                            <th className="p-3">Aksi</th>
+                <div className="table-responsive">
+                <table className="table table-hover align-middle">
+                    <thead className="table-light">
+                        <tr>
+                            <th scope="col" className="py-3">Karyawan</th>
+                            <th scope="col" className="py-3">NIP</th>
+                            <th scope="col" className="py-3">Jabatan</th>
+                            <th scope="col" className="py-3">Departemen</th>
+                            <th scope="col" className="py-3">Status</th>
+                            <th scope="col" className="py-3">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         {filteredEmployees.map(emp => {
                             const user = users.find(u => u.employeeDetails?.id === emp.id);
                             return (
-                                <tr key={emp.id} className="border-b">
-                                    <td className="p-3 flex items-center">
-                                        <img src={emp.avatarUrl} className="w-10 h-10 rounded-full object-cover mr-3" alt={emp.id}/>
-                                        {user?.name || 'Tidak Dikenal'}
+                                <tr key={emp.id}>
+                                    <td>
+                                        <div className="d-flex align-items-center">
+                                            <img src={emp.avatarUrl} className="rounded-circle me-3" width="40" height="40" alt={emp.id}/>
+                                            <span>{user?.name || 'Tidak Dikenal'}</span>
+                                        </div>
                                     </td>
-                                    <td className="p-3">{emp.nip}</td>
-                                    <td className="p-3">{emp.position}</td>
-                                    <td className="p-3">{emp.department}</td>
-                                    <td className="p-3">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${emp.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                    <td>{emp.nip}</td>
+                                    <td>{emp.position}</td>
+                                    <td>{emp.department}</td>
+                                    <td>
+                                        <span className={`badge ${emp.isActive ? 'bg-success-subtle text-success-emphasis' : 'bg-danger-subtle text-danger-emphasis'}`}>
                                             {emp.isActive ? 'Aktif' : 'Nonaktif'}
                                         </span>
                                     </td>
-                                    <td className="p-3 whitespace-nowrap">
-                                        <Button onClick={() => openDetailsModal(emp)} className="mr-2 text-xs py-1">Lihat Detail</Button>
-                                        <Button variant="secondary" onClick={() => openFormModal(emp)} className="mr-2 text-xs py-1">Ubah</Button>
+                                    <td className="text-nowrap">
+                                        <Button size="sm" onClick={() => openDetailsModal(emp)} className="me-2">Lihat Detail</Button>
+                                        <Button size="sm" variant="secondary" onClick={() => openFormModal(emp)}>Ubah</Button>
                                     </td>
                                 </tr>
                             );
@@ -248,7 +366,7 @@ const EmployeeManagement: React.FC = () => {
     );
 };
 
-const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: string, email?: string }) | null, onSave: (data: Partial<Employee> & { name: string; email: string }) => void, onClose: () => void, isLoading: boolean }> = ({ employee, onSave, onClose, isLoading }) => {
+const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: string, email?: string }) | null, onSave: (data: Partial<Employee> & { name: string; email: string }, avatarFile: File | null) => void, onClose: () => void, isLoading: boolean }> = ({ employee, onSave, onClose, isLoading }) => {
     const [formData, setFormData] = useState({
         id: employee?.id || undefined,
         name: employee?.name || '',
@@ -275,21 +393,22 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         trainingCertificates: employee?.trainingCertificates || [],
         payrollInfo: employee?.payrollInfo || { baseSalary: 0, incomes: [], deductions: [] },
     });
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
-        setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
+        const newValue = type === 'checkbox' ? checked : value;
+        setFormData({ ...formData, [name]: newValue });
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setFormData({ ...formData, avatarUrl: reader.result as string });
-            };
-            reader.readAsDataURL(file);
+        const file = e.target.files?.[0];
+        if (file) {
+            setAvatarFile(file);
+            setAvatarPreview(URL.createObjectURL(file));
         }
     };
 
@@ -297,7 +416,7 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
         const list = [...(formData[field] || [])];
         list[index] = { ...list[index], [e.target.name]: e.target.value };
         setFormData({ ...formData, [field]: list as any });
-    }
+    } 
     
     const handleAddItem = (field: 'educationHistory' | 'workHistory' | 'trainingCertificates') => {
         const list = [...(formData[field] || [])];
@@ -317,118 +436,131 @@ const EmployeeFormModal: React.FC<{ employee: (Partial<Employee> & { name?: stri
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        onSave(formData, avatarFile);
     };
 
     return (
-        <Modal isOpen={true} onClose={onClose} title={employee ? "Ubah Data Karyawan" : "Tambah Karyawan"}>
-            <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
-
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Foto Profil</legend>
-                    <div className="flex items-center gap-4">
-                        <img src={formData.avatarUrl} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-2 border-gray-200" />
-                        <div>
-                            <label htmlFor="avatarUpload" className="cursor-pointer bg-white py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm leading-4 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                                <span>Ganti Foto</span>
-                                <input id="avatarUpload" name="avatar" type="file" className="sr-only" onChange={handleFileChange} accept="image/*" />
-                            </label>
-                            <p className="text-xs text-gray-500 mt-1">PNG, JPG, GIF hingga 1MB.</p>
+        <Modal show={true} onHide={onClose} size="lg">
+            <Modal.Header closeButton>
+                <Modal.Title>{employee ? "Ubah Data Karyawan" : "Tambah Karyawan"}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{maxHeight: '70vh', overflowY: 'auto'}}>
+                <Form id="employee-form" onSubmit={handleSubmit}>
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Foto Profil</legend>
+                        <div className="d-flex align-items-center gap-3">
+                            <img src={avatarPreview || formData.avatarUrl} alt="Avatar" className="rounded-circle border border-2" width="96" height="96" />
+                            <div>
+                                <Form.Label htmlFor="avatarUpload" className="btn btn-sm btn-outline-secondary">
+                                    <span>Ganti Foto</span>
+                                </Form.Label>
+                                <Form.Control id="avatarUpload" name="avatar" type="file" className="d-none" onChange={handleFileChange} accept="image/*" />
+                                <Form.Text className="mt-1">PNG, JPG, GIF hingga 2MB.</Form.Text>
+                            </div>
                         </div>
-                    </div>
-                </fieldset>
-                
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Informasi Akun & Pekerjaan</legend>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input label="Nama Karyawan" name="name" value={formData.name} onChange={handleChange} required />
-                        <Input label="Email" name="email" type="email" value={formData.email} onChange={handleChange} required />
-                        <Input label="NIP" name="nip" value={formData.nip} onChange={handleChange} required />
-                        <Input label="Posisi" name="position" value={formData.position} onChange={handleChange} required />
-                        <Input label="Pangkat" name="pangkat" value={formData.pangkat} onChange={handleChange} required />
-                        <Select label="Golongan" name="golongan" value={formData.golongan} onChange={handleChange}>
-                            {GOLONGAN_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
-                        </Select>
-                        <Input label="Departemen" name="department" value={formData.department} onChange={handleChange} required />
-                        <Input label="Tanggal Bergabung" name="joinDate" type="date" value={formData.joinDate} onChange={handleChange} required />
-                        <div className="flex items-center mt-6 md:col-span-2">
-                            <input type="checkbox" id="isActive" name="isActive" checked={formData.isActive} onChange={handleChange} className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500" />
-                            <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">Karyawan Aktif</label>
+                    </fieldset>
+                    
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Informasi Akun & Pekerjaan</legend>
+                        <div className="row g-3">
+                            <div className="col-md-6"><Input label="Nama Karyawan" name="name" value={formData.name} onChange={handleChange} required /></div>
+                            <div className="col-md-6"><Input label="Email" name="email" type="email" value={formData.email} onChange={handleChange} required /></div>
+                            <div className="col-md-6"><Input label="NIP" name="nip" value={formData.nip} onChange={handleChange} required /></div>
+                            <div className="col-md-6"><Input label="Posisi" name="position" value={formData.position} onChange={handleChange} required /></div>
+                            <div className="col-md-6"><Input label="Pangkat" name="pangkat" value={formData.pangkat} onChange={handleChange} required /></div>
+                            <div className="col-md-6"><Select label="Golongan" name="golongan" value={formData.golongan} onChange={handleChange}>
+                                {GOLONGAN_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                            </Select></div>
+                            <div className="col-md-6"><Input label="Departemen" name="department" value={formData.department} onChange={handleChange} required /></div>
+                            <div className="col-md-6"><Input label="Tanggal Bergabung" name="joinDate" type="date" value={formData.joinDate} onChange={handleChange} required /></div>
+                            <div className="col-12 mt-3">
+                                <Form.Check type="checkbox" id="isActive" name="isActive" label="Karyawan Aktif" checked={formData.isActive} onChange={handleChange} />
+                            </div>
                         </div>
-                    </div>
-                </fieldset>
+                    </fieldset>
 
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Informasi Pribadi</legend>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input label="Nomor Telepon" name="phone" value={formData.phone} onChange={handleChange} required />
-                        <Input label="Tempat Lahir" name="pob" value={formData.pob} onChange={handleChange} />
-                        <Input label="Tanggal Lahir" name="dob" type="date" value={formData.dob} onChange={handleChange} />
-                        <Select label="Jenis Kelamin" name="gender" value={formData.gender} onChange={handleChange}>
-                            <option value="Laki-laki">Laki-laki</option>
-                            <option value="Perempuan">Perempuan</option>
-                        </Select>
-                        <Select label="Agama" name="religion" value={formData.religion} onChange={handleChange}>
-                            <option>Islam</option><option>Kristen</option><option>Katolik</option><option>Hindu</option><option>Buddha</option><option>Konghucu</option>
-                        </Select>
-                        <Select label="Status Perkawinan" name="maritalStatus" value={formData.maritalStatus} onChange={handleChange}>
-                            <option>Lajang</option><option>Menikah</option><option>Bercerai</option><option>Janda/Duda</option>
-                        </Select>
-                        <Input label="Jumlah Anak" name="numberOfChildren" type="number" min="0" value={formData.numberOfChildren} onChange={handleChange} />
-                        <Textarea label="Alamat" name="address" value={formData.address} onChange={handleChange} className="md:col-span-2" />
-                    </div>
-                </fieldset>
-
-                {/* Dynamic Fields Sections */}
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Riwayat Pendidikan</legend>
-                    {formData.educationHistory?.map((edu, index) => (
-                        <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2 p-2 border rounded relative">
-                            <Input label="Jenjang" name="level" value={edu.level} onChange={e => handleDynamicChange(index, e, 'educationHistory')} placeholder="cth: S1" />
-                            <Input label="Institusi" name="institution" value={edu.institution} onChange={e => handleDynamicChange(index, e, 'educationHistory')} />
-                            <Input label="Jurusan" name="major" value={edu.major} onChange={e => handleDynamicChange(index, e, 'educationHistory')} />
-                            <Input label="Tahun Lulus" name="graduationYear" type="number" value={edu.graduationYear} onChange={e => handleDynamicChange(index, e, 'educationHistory')} />
-                             <button type="button" onClick={() => handleRemoveItem(index, 'educationHistory')} className="absolute top-1 right-1 text-red-500 hover:text-red-700">&times;</button>
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Informasi Pribadi</legend>
+                        <div className="row g-3">
+                            <div className="col-md-6"><Input label="Nomor Telepon" name="phone" value={formData.phone} onChange={handleChange} required /></div>
+                            <div className="col-md-6"><Input label="Tempat Lahir" name="pob" value={formData.pob} onChange={handleChange} /></div>
+                            <div className="col-md-6"><Input label="Tanggal Lahir" name="dob" type="date" value={formData.dob} onChange={handleChange} /></div>
+                            <div className="col-md-6"><Select label="Jenis Kelamin" name="gender" value={formData.gender} onChange={handleChange}>
+                                <option value="Laki-laki">Laki-laki</option>
+                                <option value="Perempuan">Perempuan</option>
+                            </Select></div>
+                            <div className="col-md-6"><Select label="Agama" name="religion" value={formData.religion} onChange={handleChange}>
+                                <option>Islam</option><option>Kristen</option><option>Katolik</option><option>Hindu</option><option>Buddha</option><option>Konghucu</option>
+                            </Select></div>
+                            <div className="col-md-6"><Select label="Status Perkawinan" name="maritalStatus" value={formData.maritalStatus} onChange={handleChange}>
+                                <option>Lajang</option><option>Menikah</option><option>Bercerai</option><option>Janda/Duda</option>
+                            </Select></div>
+                            <div className="col-md-6"><Input label="Jumlah Anak" name="numberOfChildren" type="number" min="0" value={formData.numberOfChildren} onChange={handleChange} /></div>
+                            <div className="col-12"><Textarea label="Alamat" name="address" value={formData.address} onChange={handleChange} /></div>
                         </div>
-                    ))}
-                    <Button type="button" variant="secondary" onClick={() => handleAddItem('educationHistory')}>+ Tambah Pendidikan</Button>
-                </fieldset>
-                
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Riwayat Pekerjaan</legend>
-                    {formData.workHistory?.map((work, index) => (
-                        <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2 p-2 border rounded relative">
-                            <Input label="Perusahaan" name="company" value={work.company} onChange={e => handleDynamicChange(index, e, 'workHistory')} />
-                            <Input label="Posisi" name="position" value={work.position} onChange={e => handleDynamicChange(index, e, 'workHistory')} />
-                            <Input label="Tanggal Mulai" name="startDate" type="date" value={work.startDate} onChange={e => handleDynamicChange(index, e, 'workHistory')} />
-                            <Input label="Tanggal Selesai" name="endDate" type="date" value={work.endDate} onChange={e => handleDynamicChange(index, e, 'workHistory')} />
-                            <button type="button" onClick={() => handleRemoveItem(index, 'workHistory')} className="absolute top-1 right-1 text-red-500 hover:text-red-700">&times;</button>
-                        </div>
-                    ))}
-                    <Button type="button" variant="secondary" onClick={() => handleAddItem('workHistory')}>+ Tambah Pekerjaan</Button>
-                </fieldset>
+                    </fieldset>
 
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Riwayat Pendidikan</legend>
+                        {formData.educationHistory?.map((edu, index) => (
+                            <div key={index} className="row g-2 mb-2 p-2 border rounded position-relative">
+                                <div className="col-md-3"><Input label="Jenjang" name="level" value={edu.level} onChange={e => handleDynamicChange(index, e, 'educationHistory')} placeholder="cth: S1" /></div>
+                                <div className="col-md-3"><Input label="Institusi" name="institution" value={edu.institution} onChange={e => handleDynamicChange(index, e, 'educationHistory')} /></div>
+                                <div className="col-md-3"><Input label="Jurusan" name="major" value={edu.major} onChange={e => handleDynamicChange(index, e, 'educationHistory')} /></div>
+                                <div className="col-md-3"><Input label="Tahun Lulus" name="graduationYear" type="number" value={edu.graduationYear} onChange={e => handleDynamicChange(index, e, 'educationHistory')} /></div>
+                                <button type="button" onClick={() => handleRemoveItem(index, 'educationHistory')} className="btn-close position-absolute top-0 end-0 mt-1 me-1"></button>
+                            </div>
+                        ))}
+                        <Button type="button" variant="secondary" onClick={() => handleAddItem('educationHistory')}>+ Tambah Pendidikan</Button>
+                    </fieldset>
 
-                <div className="flex justify-end pt-4">
-                    <Button type="button" variant="secondary" onClick={onClose} className="mr-2">Batal</Button>
-                    <Button type="submit" disabled={isLoading}>{isLoading ? 'Menyimpan...' : 'Simpan'}</Button>
-                </div>
-            </form>
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Riwayat Pekerjaan</legend>
+                        {formData.workHistory?.map((work, index) => (
+                            <div key={index} className="row g-2 mb-2 p-2 border rounded position-relative">
+                                <div className="col-md-3"><Input label="Perusahaan" name="company" value={work.company} onChange={e => handleDynamicChange(index, e, 'workHistory')} /></div>
+                                <div className="col-md-3"><Input label="Posisi" name="position" value={work.position} onChange={e => handleDynamicChange(index, e, 'workHistory')} /></div>
+                                <div className="col-md-3"><Input label="Tanggal Mulai" name="startDate" type="date" value={work.startDate} onChange={e => handleDynamicChange(index, e, 'workHistory')} /></div>
+                                <div className="col-md-3"><Input label="Tanggal Selesai" name="endDate" type="date" value={work.endDate} onChange={e => handleDynamicChange(index, e, 'workHistory')} /></div>
+                                <button type="button" onClick={() => handleRemoveItem(index, 'workHistory')} className="btn-close position-absolute top-0 end-0 mt-1 me-1"></button>
+                            </div>
+                        ))}
+                        <Button type="button" variant="secondary" onClick={() => handleAddItem('workHistory')}>+ Tambah Pekerjaan</Button>
+                    </fieldset>
+
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Sertifikat Pelatihan</legend>
+                        {formData.trainingCertificates?.map((cert, index) => (
+                            <div key={index} className="row g-2 mb-2 p-2 border rounded position-relative">
+                                <div className="col-md-4"><Input label="Nama Sertifikat" name="name" value={cert.name} onChange={e => handleDynamicChange(index, e, 'trainingCertificates')} /></div>
+                                <div className="col-md-4"><Input label="Penerbit" name="issuer" value={cert.issuer} onChange={e => handleDynamicChange(index, e, 'trainingCertificates')} /></div>
+                                <div className="col-md-4"><Input label="Tanggal Terbit" name="issueDate" type="date" value={cert.issueDate} onChange={e => handleDynamicChange(index, e, 'trainingCertificates')} /></div>
+                                <button type="button" onClick={() => handleRemoveItem(index, 'trainingCertificates')} className="btn-close position-absolute top-0 end-0 mt-1 me-1"></button>
+                            </div>
+                        ))}
+                        <Button type="button" variant="secondary" onClick={() => handleAddItem('trainingCertificates')}>+ Tambah Sertifikat</Button>
+                    </fieldset>
+                </Form>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={onClose}>Batal</Button>
+                <Button type="submit" form="employee-form" disabled={isLoading}>{isLoading ? 'Menyimpan...' : 'Simpan'}</Button>
+            </Modal.Footer>
         </Modal>
     );
 };
 
 const DetailSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-    <div className="mb-6">
-        <h4 className="text-lg font-semibold text-primary-700 border-b-2 border-primary-200 pb-2 mb-3">{title}</h4>
+    <div className="mb-4">
+        <h4 className="h5 text-primary border-bottom pb-2 mb-3">{title}</h4>
         {children}
     </div>
 );
 
 const DetailItem: React.FC<{ label: string; value: string | number | undefined }> = ({ label, value }) => (
     <div>
-        <p className="text-sm text-gray-500">{label}</p>
-        <p className="font-semibold text-gray-800">{value || '-'}</p>
+        <p className="text-muted small mb-0">{label}</p>
+        <p className="fw-semibold">{value || '-'}</p>
     </div>
 );
 
@@ -465,68 +597,71 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
     };
 
     return (
-        <Modal isOpen={true} onClose={onClose} title={`Detail Karyawan: ${user.name || ''}`}>
-            <div className="max-h-[75vh] overflow-y-auto pr-4 print:max-h-none print:overflow-visible">
-                <div className="flex flex-col md:flex-row items-start mb-6">
-                    <img src={employee.avatarUrl} alt="Avatar" className="w-28 h-28 rounded-full object-cover mb-4 md:mb-0 md:mr-6 flex-shrink-0 border-4 border-gray-200" />
+        <Modal show={true} onHide={onClose} size="lg">
+            <Modal.Header closeButton>
+                <Modal.Title>{`Detail Karyawan: ${user.name || ''}`}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{maxHeight: '75vh', overflowY: 'auto'}}>
+                <div className="d-flex flex-column flex-md-row align-items-start mb-4">
+                    <img src={employee.avatarUrl} alt="Avatar" className="rounded-circle border border-2 me-md-4 mb-3 mb-md-0" width="120" height="120" />
                     <div>
-                        <h3 className="text-2xl font-bold text-gray-800">{user.name}</h3>
-                        <p className="text-md text-gray-600">{employee.position}</p>
-                        <p className="text-sm text-gray-500">{employee.department} - {employee.pangkat} ({employee.golongan})</p>
-                        <span className={`mt-2 inline-block px-3 py-1 rounded-full text-sm font-semibold ${employee.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        <h3 className="h4 fw-bold">{user.name}</h3>
+                        <p className="text-muted">{employee.position}</p>
+                        <p className="small text-muted">{employee.department} - {employee.pangkat} ({employee.golongan})</p>
+                        <span className={`badge mt-2 ${employee.isActive ? 'bg-success-subtle text-success-emphasis' : 'bg-danger-subtle text-danger-emphasis'}`}>
                             {employee.isActive ? 'Aktif' : 'Nonaktif'}
                         </span>
                     </div>
                 </div>
 
                 <DetailSection title="Informasi Pekerjaan">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        <DetailItem label="NIP" value={employee.nip} />
-                        <DetailItem label="Email" value={user.email} />
-                        <DetailItem label="Telepon" value={employee.phone} />
-                        <DetailItem label="Tanggal Bergabung" value={employee.joinDate} />
-                        <DetailItem label="Sisa Cuti" value={`${employee.leaveBalance} hari`} />
+                    <div className="row g-3">
+                        <div className="col-md-4"><DetailItem label="NIP" value={employee.nip} /></div>
+                        <div className="col-md-4"><DetailItem label="Email" value={user.email} /></div>
+                        <div className="col-md-4"><DetailItem label="Telepon" value={employee.phone} /></div>
+                        <div className="col-md-4"><DetailItem label="Tanggal Bergabung" value={employee.joinDate} /></div>
+                        <div className="col-md-4"><DetailItem label="Sisa Cuti" value={`${employee.leaveBalance} hari`} /></div>
                     </div>
                 </DetailSection>
 
                 <DetailSection title="Informasi Pribadi">
-                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        <DetailItem label="Tempat, Tanggal Lahir" value={`${employee.pob}, ${employee.dob}`} />
-                        <DetailItem label="Jenis Kelamin" value={employee.gender} />
-                        <DetailItem label="Agama" value={employee.religion} />
-                        <DetailItem label="Status Perkawinan" value={employee.maritalStatus} />
-                        <DetailItem label="Jumlah Anak" value={employee.numberOfChildren} />
-                        <div className="col-span-2 md:col-span-3">
+                     <div className="row g-3">
+                        <div className="col-md-4"><DetailItem label="Tempat, Tanggal Lahir" value={`${employee.pob}, ${employee.dob}`} /></div>
+                        <div className="col-md-4"><DetailItem label="Jenis Kelamin" value={employee.gender} /></div>
+                        <div className="col-md-4"><DetailItem label="Agama" value={employee.religion} /></div>
+                        <div className="col-md-4"><DetailItem label="Status Perkawinan" value={employee.maritalStatus} /></div>
+                        <div className="col-md-4"><DetailItem label="Jumlah Anak" value={employee.numberOfChildren} /></div>
+                        <div className="col-12">
                             <DetailItem label="Alamat" value={employee.address} />
                         </div>
                     </div>
                 </DetailSection>
 
                 <DetailSection title="Riwayat Pendidikan">
-                    <ul className="space-y-2 list-disc list-inside">
-                        {employee.educationHistory.map((edu, i) => <li key={i}><strong>{edu.level} {edu.major}</strong> di {edu.institution} (Lulus {edu.graduationYear})</li>)}
-                        {employee.educationHistory.length === 0 && <p className="text-gray-500">Tidak ada data.</p>}
+                    <ul className="list-group list-group-flush">
+                        {employee.educationHistory.map((edu, i) => <li key={i} className="list-group-item"><strong>{edu.level} {edu.major}</strong> di {edu.institution} (Lulus {edu.graduationYear})</li>)}
+                        {employee.educationHistory.length === 0 && <p className="text-muted">Tidak ada data.</p>}
                     </ul>
                 </DetailSection>
 
                 <DetailSection title="Riwayat Pekerjaan">
-                    <ul className="space-y-2 list-disc list-inside">
-                         {employee.workHistory.map((work, i) => <li key={i}><strong>{work.position}</strong> di {work.company} ({work.startDate} - {work.endDate})</li>)}
-                         {employee.workHistory.length === 0 && <p className="text-gray-500">Tidak ada data.</p>}
+                    <ul className="list-group list-group-flush">
+                         {employee.workHistory.map((work, i) => <li key={i} className="list-group-item"><strong>{work.position}</strong> di {work.company} ({work.startDate} - {work.endDate})</li>)}
+                         {employee.workHistory.length === 0 && <p className="text-muted">Tidak ada data.</p>}
                     </ul>
                 </DetailSection>
 
                  <DetailSection title="Sertifikat Pelatihan">
-                    <ul className="space-y-2 list-disc list-inside">
-                         {employee.trainingCertificates.map((cert, i) => <li key={i}><strong>{cert.name}</strong> dari {cert.issuer} (Diperoleh {cert.issueDate})</li>)}
-                         {employee.trainingCertificates.length === 0 && <p className="text-gray-500">Tidak ada data.</p>}
+                    <ul className="list-group list-group-flush">
+                         {employee.trainingCertificates.map((cert, i) => <li key={i} className="list-group-item"><strong>{cert.name}</strong> dari {cert.issuer} (Diperoleh {cert.issueDate})</li>)}
+                         {employee.trainingCertificates.length === 0 && <p className="text-muted">Tidak ada data.</p>}
                     </ul>
                 </DetailSection>
-            </div>
-            <div className="flex justify-end mt-6 pt-4 border-t print:hidden">
-                <Button onClick={onClose} variant="secondary" className="mr-2">Tutup</Button>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={onClose}>Tutup</Button>
                 <Button onClick={handlePrint}>Cetak / Unduh</Button>
-            </div>
+            </Modal.Footer>
         </Modal>
     );
 };
@@ -536,7 +671,6 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
         const { db, refreshData } = useData();
         const { addToast } = useToast();
         const { leaveRequests } = db!;
-    const API_BASE_URL = 'http://localhost:2025';
     
     const [rejectionModalState, setRejectionModalState] = useState<{ isOpen: boolean, requestId: string | null }>({ isOpen: false, requestId: null });
     const [rejectionReason, setRejectionReason] = useState('');
@@ -572,27 +706,11 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
     }
     
     const openDocumentModal = (documentUrl: string, fileName: string) => {
-        // Handle different types of URLs
-        let fullUrl = documentUrl;
-        
-        // If it's a relative path starting with /uploads, it should be served by our backend
-        if (documentUrl.startsWith('/uploads/')) {
-            fullUrl = `${API_BASE_URL}${documentUrl}`;
-        } 
-        // If it's an absolute URL, use it as is
-        else if (documentUrl.startsWith('http://') || documentUrl.startsWith('https://')) {
-            fullUrl = documentUrl;
-        }
-        // If it's a file:// URL (which is incorrect), try to convert it to a proper path
-        else if (documentUrl.startsWith('file://')) {
-            // Extract filename and construct proper URL
-            const filename = documentUrl.split('/').pop();
-            if (filename) {
-                fullUrl = `${API_BASE_URL}/uploads/${filename}`;
-            }
-        }
-        
-        setDocumentModalState({ isOpen: true, documentUrl: fullUrl, fileName });
+        // With the /uploads proxy in vite.config.ts, we can use relative URLs directly.
+        // The browser will request from the Vite server, which then proxies to the backend.
+        // Absolute URLs (http/https) will work as-is.
+        // The previous logic for 'file://' was likely incorrect and has been removed for security and consistency.
+        setDocumentModalState({ isOpen: true, documentUrl: documentUrl, fileName });
     };
     
     const closeDocumentModal = () => {
@@ -601,10 +719,8 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
     
     const handleDownloadDocument = () => {
         if (documentModalState.documentUrl && documentModalState.fileName) {
-            // Create a temporary link to download the file
             const link = document.createElement('a');
             
-            // Handle different types of URLs for download
             let downloadUrl = documentModalState.documentUrl;
             
             link.href = downloadUrl;
@@ -617,9 +733,9 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
     
     const statusColor = (status: LeaveStatus) => {
         switch(status) {
-            case LeaveStatus.PENDING: return 'bg-yellow-100 text-yellow-800';
-            case LeaveStatus.APPROVED: return 'bg-green-100 text-green-800';
-            case LeaveStatus.REJECTED: return 'bg-red-100 text-red-800';
+            case LeaveStatus.PENDING: return 'bg-warning-subtle text-warning-emphasis';
+            case LeaveStatus.APPROVED: return 'bg-success-subtle text-success-emphasis';
+            case LeaveStatus.REJECTED: return 'bg-danger-subtle text-danger-emphasis';
         }
     };
 
@@ -627,47 +743,47 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
         <div>
             <PageTitle title="Pengajuan Cuti" />
             <Card>
-                 <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="bg-gray-100">
-                            <th className="p-3">Karyawan</th>
-                            <th className="p-3">Jenis Cuti</th>
-                            <th className="p-3">Tanggal Mulai</th>
-                            <th className="p-3">Tanggal Selesai</th>
-                            <th className="p-3">Alasan</th>
-                            <th className="p-3">Dokumen</th>
-                            <th className="p-3">Status</th>
-                            <th className="p-3">Aksi</th>
+                 <div className="table-responsive">
+                <table className="table table-hover align-middle">
+                    <thead className="table-light">
+                        <tr>
+                            <th scope="col" className="py-3">Karyawan</th>
+                            <th scope="col" className="py-3">Jenis Cuti</th>
+                            <th scope="col" className="py-3">Tanggal Mulai</th>
+                            <th scope="col" className="py-3">Tanggal Selesai</th>
+                            <th scope="col" className="py-3">Alasan</th>
+                            <th scope="col" className="py-3">Dokumen</th>
+                            <th scope="col" className="py-3">Status</th>
+                            <th scope="col" className="py-3">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         {leaveRequests.map(req => (
-                            <tr key={req.id} className="border-b">
-                                <td className="p-3">{req.employeeName}</td>
-                                <td className="p-3">{req.leaveType}</td>
-                                <td className="p-3">{req.startDate}</td>
-                                <td className="p-3">{req.endDate}</td>
-                                <td className="p-3 max-w-xs truncate" title={req.reason}>{req.reason}</td>
-                                <td className="p-3">
+                            <tr key={req.id}>
+                                <td>{req.employeeName}</td>
+                                <td>{req.leaveType}</td>
+                                <td>{req.startDate}</td>
+                                <td>{req.endDate}</td>
+                                <td style={{maxWidth: '200px'}} className="text-truncate" title={req.reason}>{req.reason}</td>
+                                <td>
                                     {req.supportingDocument ? (
                                         <Button 
                                             variant="secondary" 
-                                            className="text-xs"
+                                            size="sm"
                                             onClick={() => openDocumentModal(req.supportingDocument!, `document_${req.id}`)}
                                         >
                                             Lihat Dokumen
                                         </Button>
                                     ) : (
-                                        <span className="text-gray-400">-</span>
+                                        <span className="text-muted">-</span>
                                     )}
                                 </td>
-                                <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColor(req.status)}`}>{req.status}</span></td>
-                                <td className="p-3">
+                                <td><span className={`badge ${statusColor(req.status)}`}>{req.status}</span></td>
+                                <td className="text-nowrap">
                                     {req.status === LeaveStatus.PENDING && (
                                         <>
-                                            <Button variant="success" onClick={() => handleApprove(req.id)} className="mr-2 text-xs">Setujui</Button>
-                                            <Button variant="danger" onClick={() => openRejectionModal(req.id)} className="text-xs">Tolak</Button>
+                                            <Button variant="success" size="sm" onClick={() => handleApprove(req.id)} className="me-2">Setujui</Button>
+                                            <Button variant="danger" size="sm" onClick={() => openRejectionModal(req.id)}>Tolak</Button>
                                         </>
                                     )}
                                 </td>
@@ -677,8 +793,11 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
                 </table>
                 </div>
             </Card>
-            <Modal isOpen={rejectionModalState.isOpen} onClose={closeRejectionModal} title="Alasan Penolakan Cuti">
-                <div className="space-y-4">
+            <Modal show={rejectionModalState.isOpen} onHide={closeRejectionModal}>
+                <Modal.Header closeButton>
+                    <Modal.Title>Alasan Penolakan Cuti</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
                     <Textarea
                         label="Mohon berikan alasan penolakan pengajuan cuti ini."
                         value={rejectionReason}
@@ -686,47 +805,49 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
                         required
                         rows={3}
                     />
-                    <div className="flex justify-end pt-2">
-                        <Button type="button" variant="secondary" onClick={closeRejectionModal} className="mr-2">Batal</Button>
-                        <Button variant="danger" onClick={handleRejectSubmit} disabled={!rejectionReason.trim()}>Kirim Penolakan</Button>
-                    </div>
-                </div>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={closeRejectionModal}>Batal</Button>
+                    <Button variant="danger" onClick={handleRejectSubmit} disabled={!rejectionReason.trim()}>Kirim Penolakan</Button>
+                </Modal.Footer>
             </Modal>
-            <Modal isOpen={documentModalState.isOpen} onClose={closeDocumentModal} title="Dokumen Pendukung">
-                <div className="space-y-4">
+            <Modal show={documentModalState.isOpen} onHide={closeDocumentModal}>
+                <Modal.Header closeButton>
+                    <Modal.Title>Dokumen Pendukung</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
                     {documentModalState.documentUrl && (
-                        <div className="flex flex-col items-center">
+                        <div className="d-flex flex-column align-items-center">
                             {documentModalState.documentUrl.toLowerCase().endsWith('.pdf') ? (
-                                // For PDF documents, show an iframe preview
                                 <iframe 
                                     src={documentModalState.documentUrl}
-                                    className="w-full h-96"
+                                    className="w-100"
+                                    style={{height: '70vh'}}
                                     title="Document Preview"
                                 />
                             ) : (
-                                // For image documents or unknown types, show an image preview or generic message
                                 <>
                                     {documentModalState.documentUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
                                         <img 
                                             src={documentModalState.documentUrl}
                                             alt="Document Preview" 
-                                            className="max-w-full max-h-96 object-contain"
+                                            className="img-fluid" style={{maxHeight: '70vh'}}
                                         />
                                     ) : (
-                                        <div className="text-center p-8">
-                                            <p className="mb-4">Pratinjau dokumen tidak tersedia untuk jenis file ini.</p>
-                                            <p className="text-sm text-gray-500">Klik "Unduh Dokumen" untuk melihat file.</p>
+                                        <div className="text-center p-5">
+                                            <p className="mb-3">Pratinjau dokumen tidak tersedia untuk jenis file ini.</p>
+                                            <p className="small text-muted">Klik "Unduh Dokumen" untuk melihat file.</p>
                                         </div>
                                     )}
                                 </>
                             )}
-                            <div className="mt-4 flex space-x-2">
-                                <Button onClick={handleDownloadDocument}>Unduh Dokumen</Button>
-                                <Button variant="secondary" onClick={closeDocumentModal}>Tutup</Button>
-                            </div>
                         </div>
                     )}
-                </div>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button onClick={handleDownloadDocument}>Unduh Dokumen</Button>
+                    <Button variant="secondary" onClick={closeDocumentModal}>Tutup</Button>
+                </Modal.Footer>
             </Modal>
         </div>
     );
@@ -735,10 +856,15 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
     const AttendanceManagement: React.FC = () => {
         const { db, refreshData } = useData();
         const { addToast } = useToast();
-        const { attendance: records, users, employees } = db!;
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+        const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (!db || !db.attendance) {
+            return <p>Memuat data absensi...</p>;
+        }
+
+        const { attendance: records, users, employees } = db;
+
+        const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
@@ -751,32 +877,33 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
                 const worksheet = workbook.Sheets[sheetName];
                 const json: any[] = XLSX.utils.sheet_to_json(worksheet);
 
-                const attendanceRecords = json.map(row => {
-                    if (!row.NIP) {
-                        console.warn('Row without NIP found, skipping:', row);
-                        return null;
-                    }
-                    const employee = employees.find(emp => emp.nip === row.NIP);
-                    if (!employee) {
-                        console.warn(`Employee with NIP ${row.NIP} not found.`);
-                        return null;
-                    }
-                    return {
-                        employeeId: employee.id,
-                        employeeName: users.find(u => u.employeeDetails?.id === employee.id)?.name || 'N/A',
-                        date: row.Tanggal,
-                        clockIn: row['Jam Masuk'],
-                        clockOut: row['Jam Pulang'],
-                        status: 'Tepat Waktu', // Placeholder, can be improved
-                    };
-                }).filter(Boolean) as AttendanceRecord[];
+                const attendanceRecords = json.map(row => ({
+                    employeeName: row.employeeName,
+                    date: row.date,
+                    clockIn: row.clockIn,
+                    clockOut: row.clockOut,
+                    status: row.status,
+                }));
 
                 if (attendanceRecords.length > 0) {
-                    await api.uploadAttendance(attendanceRecords);
-                    addToast('Data absensi berhasil diunggah', 'success');
+                    const response = await api.uploadAttendance(attendanceRecords as any);
+                    const warnings = response.warnings || [];
+                    if (warnings.length > 0) {
+                        let toastMessage = `Unggah selesai dengan ${warnings.length} peringatan.`;
+                        if (warnings.length <= 3) {
+                            const warningDetails = warnings.join('\n');
+                            toastMessage = `${toastMessage}:\n${warningDetails}`;
+                        } else {
+                            toastMessage = `${toastMessage} Periksa konsol untuk detail.`;
+                        }
+                        addToast(toastMessage, 'warning');
+                        console.warn('Peringatan unggah absensi:', warnings);
+                    } else {
+                        addToast('Data absensi berhasil diunggah', 'success');
+                    }
                     refreshData();
                 } else {
-                    addToast('Tidak ada data absensi yang valid untuk diunggah.', 'info');
+                    addToast('File tidak berisi data absensi yang valid.', 'info');
                 }
             } catch (error) {
                 addToast(error instanceof Error ? error.message : 'Gagal mengunggah file', 'error');
@@ -799,7 +926,6 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
     };
 
     const filteredRecords = useMemo(() => {
-        // To show today's data correctly, we'll use a fixed date for the demo
         const demoToday = '2024-07-30';
         if (selectedDate === new Date().toISOString().split('T')[0]) {
              return records.filter(r => r.date === demoToday);
@@ -811,62 +937,65 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
         let color = '';
         switch(status) {
             case AttendanceStatus.ON_TIME:
-                color = 'bg-green-100 text-green-800';
+                color = 'bg-success-subtle text-success-emphasis';
                 break;
             case AttendanceStatus.LATE:
-                color = 'bg-red-100 text-red-800';
+                color = 'bg-danger-subtle text-danger-emphasis';
                 break;
             default:
-                color = 'bg-gray-100 text-gray-800';
+                color = 'bg-secondary-subtle text-secondary-emphasis';
         }
-        return <span className={`px-2 py-1 rounded-full text-xs font-semibold ${color}`}>{status}</span>;
+        return <span className={`badge ${color}`}>{status}</span>;
     }
 
     return (
         <div>
             <PageTitle title="Manajemen Absensi">
-                <div className="flex items-center space-x-2">
+                <div className="d-flex align-items-center gap-2">
                     <Input 
                         label=""
                         type="date"
                         value={selectedDate}
                         onChange={e => setSelectedDate(e.target.value)}
                     />
-                    <label htmlFor="attendance-upload" className="cursor-pointer bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700">
+                    <Button as="a" href="/template_absensi.csv" download="template_absensi.csv" variant="secondary">
+                        Unduh Template
+                    </Button>
+                    <Button as="label" htmlFor="attendance-upload">
                         Unggah Excel
-                    </label>
-                    <input id="attendance-upload" type="file" className="hidden" onChange={handleFileUpload} accept=".xlsx, .xls"/>
+                    </Button>
+                    <input id="attendance-upload" type="file" className="d-none" onChange={handleFileUpload} accept=".xlsx, .xls, .csv"/>
                 </div>
             </PageTitle>
             <Card>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-gray-100">
-                                <th className="p-3">Karyawan</th>
-                                <th className="p-3">Clock In</th>
-                                <th className="p-3">Clock Out</th>
-                                <th className="p-3">Durasi Kerja</th>
-                                <th className="p-3">Status</th>
-                                <th className="p-3">Aksi</th>
+                <div className="table-responsive">
+                    <table className="table table-hover align-middle">
+                        <thead className="table-light">
+                            <tr>
+                                <th scope="col" className="py-3">Karyawan</th>
+                                <th scope="col" className="py-3">Clock In</th>
+                                <th scope="col" className="py-3">Clock Out</th>
+                                <th scope="col" className="py-3">Durasi Kerja</th>
+                                <th scope="col" className="py-3">Status</th>
+                                <th scope="col" className="py-3">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredRecords.map(rec => (
-                                <tr key={rec.id} className="border-b">
-                                    <td className="p-3">{rec.employeeName}</td>
-                                    <td className="p-3">{rec.clockIn}</td>
-                                    <td className="p-3">{rec.clockOut || 'Belum Clock Out'}</td>
-                                    <td className="p-3">{calculateDuration(rec.clockIn, rec.clockOut)}</td>
-                                    <td className="p-3">{getStatusChip(rec.status)}</td>
-                                    <td className="p-3">
-                                        <Button variant="secondary" className="text-xs">Ubah</Button>
+                                <tr key={rec.id}>
+                                    <td>{rec.employeeName}</td>
+                                    <td>{rec.clockIn}</td>
+                                    <td>{rec.clockOut || 'Belum Clock Out'}</td>
+                                    <td>{calculateDuration(rec.clockIn, rec.clockOut)}</td>
+                                    <td>{getStatusChip(rec.status)}</td>
+                                    <td>
+                                        <Button variant="secondary" size="sm">Ubah</Button>
                                     </td>
                                 </tr>
                             ))}
                             {filteredRecords.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="text-center p-4 text-gray-500">
+                                    <td colSpan={6} className="text-center p-4 text-muted">
                                         Tidak ada data absensi untuk tanggal ini.
                                     </td>
                                 </tr>
@@ -880,7 +1009,7 @@ const EmployeeDetailsModal: React.FC<{ employee?: Employee; user?: User; onClose
 };
 
 
-const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string}, onSave: (review: Omit<PerformanceReview, 'id' | 'overallScore'>) => void, onClose: () => void }> = ({ employee, onSave, onClose }) => {
+const PerformanceReviewFormModal: React.FC <{ employee: {id: string, name: string}, onSave: (review: Omit<PerformanceReview, 'id' | 'overallScore'>) => void, onClose: () => void }> = ({ employee, onSave, onClose }) => {
     const defaultKpi: Omit<KPI, 'id'> = { metric: '', target: '', result: '', weight: 0, score: 3, notes: '' };
     const [reviewData, setReviewData] = useState<Omit<PerformanceReview, 'id' | 'employeeId' | 'employeeName' | 'overallScore'>>({
         period: 'Q3 2024',
@@ -920,41 +1049,45 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
             employeeName: employee.name,
         };
         onSave(finalReview);
-    }
+    } 
     
     return (
-        <Modal isOpen={true} onClose={onClose} title={`Buat Penilaian Kinerja: ${employee.name}`}>
-            <form onSubmit={handleSubmit} className="space-y-6 max-h-[75vh] overflow-y-auto pr-2">
-                <Input label="Periode Penilaian" name="period" value={reviewData.period} onChange={handleDataChange} placeholder="Contoh: Q3 2024" required />
+        <Modal show={true} onHide={onClose} size="lg">
+            <Modal.Header closeButton>
+                <Modal.Title>{`Buat Penilaian Kinerja: ${employee.name}`}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{maxHeight: '75vh', overflowY: 'auto'}}>
+                <Form onSubmit={handleSubmit}>
+                    <Input label="Periode Penilaian" name="period" value={reviewData.period} onChange={handleDataChange} placeholder="Contoh: Q3 2024" required />
 
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Key Performance Indicators (KPI)</legend>
-                    {reviewData.kpis.map((kpi, index) => (
-                        <div key={kpi.id} className="grid grid-cols-12 gap-2 mb-3 p-2 border rounded relative">
-                            <div className="col-span-12"><Input label="Metrik" name="metric" value={kpi.metric} onChange={(e) => handleKpiChange(index, e)} placeholder="Contoh: Penyelesaian Tugas" /></div>
-                            <div className="col-span-6"><Input label="Target" name="target" value={kpi.target} onChange={(e) => handleKpiChange(index, e)} /></div>
-                            <div className="col-span-6"><Input label="Hasil" name="result" value={kpi.result} onChange={(e) => handleKpiChange(index, e)} /></div>
-                            <div className="col-span-6"><Input label="Bobot (0-1)" name="weight" type="number" step="0.1" min="0" max="1" value={kpi.weight} onChange={(e) => handleKpiChange(index, e)} /></div>
-                            <div className="col-span-6"><Input label="Skor (1-5)" name="score" type="number" min="1" max="5" value={kpi.score} onChange={(e) => handleKpiChange(index, e)} /></div>
-                            <button type="button" onClick={() => removeKpi(index)} className="absolute -top-2 -right-2 text-red-500 bg-white rounded-full p-0.5 hover:text-red-700">&times;</button>
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Key Performance Indicators (KPI)</legend>
+                        {reviewData.kpis.map((kpi, index) => (
+                            <div key={kpi.id} className="row g-2 mb-3 p-2 border rounded position-relative">
+                                <div className="col-12"><Input label="Metrik" name="metric" value={kpi.metric} onChange={(e) => handleKpiChange(index, e)} placeholder="Contoh: Penyelesaian Tugas" /></div>
+                                <div className="col-md-6"><Input label="Target" name="target" value={kpi.target} onChange={(e) => handleKpiChange(index, e)} /></div>
+                                <div className="col-md-6"><Input label="Hasil" name="result" value={kpi.result} onChange={(e) => handleKpiChange(index, e)} /></div>
+                                <div className="col-md-6"><Input label="Bobot (0-1)" name="weight" type="number" step="0.1" min="0" max="1" value={kpi.weight} onChange={(e) => handleKpiChange(index, e)} /></div>
+                                <div className="col-md-6"><Input label="Skor (1-5)" name="score" type="number" min="1" max="5" value={kpi.score} onChange={(e) => handleKpiChange(index, e)} /></div>
+                                <button type="button" onClick={() => removeKpi(index)} className="btn-close position-absolute top-0 end-0 mt-1 me-1"></button>
+                            </div>
+                        ))}
+                        <Button type="button" variant="secondary" onClick={addKpi}>+ Tambah KPI</Button>
+                    </fieldset>
+
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Umpan Balik Kualitatif</legend>
+                        <div className="vstack gap-3">
+                            <Textarea label="Kekuatan" name="strengths" value={reviewData.strengths} onChange={handleDataChange} rows={3} />
+                            <Textarea label="Area untuk Peningkatan" name="areasForImprovement" value={reviewData.areasForImprovement} onChange={handleDataChange} rows={3} />
                         </div>
-                    ))}
-                    <Button type="button" variant="secondary" onClick={addKpi}>+ Tambah KPI</Button>
-                </fieldset>
-
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Umpan Balik Kualitatif</legend>
-                    <div className="space-y-4">
-                        <Textarea label="Kekuatan" name="strengths" value={reviewData.strengths} onChange={handleDataChange} rows={3} />
-                        <Textarea label="Area untuk Peningkatan" name="areasForImprovement" value={reviewData.areasForImprovement} onChange={handleDataChange} rows={3} />
-                    </div>
-                </fieldset>
-                
-                <div className="flex justify-end pt-4 border-t">
-                    <Button type="button" variant="secondary" onClick={onClose} className="mr-2">Batal</Button>
-                    <Button type="submit">Simpan Penilaian</Button>
-                </div>
-            </form>
+                    </fieldset>
+                </Form>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={onClose}>Batal</Button>
+                <Button type="submit">Simpan Penilaian</Button>
+            </Modal.Footer>
         </Modal>
     );
 };
@@ -974,8 +1107,6 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
 
     const handleSaveReview = async (newReview: Omit<PerformanceReview, 'id' | 'overallScore'>) => {
         try {
-            // FIX: The api function expects an `overallScore`, which is calculated on the backend.
-            // To satisfy the frontend type, we calculate it here. The backend will use its own calculation.
             const totalWeight = newReview.kpis.reduce((sum, kpi) => sum + kpi.weight, 0) || 1;
             const weightedScore = newReview.kpis.reduce((sum, kpi) => sum + (kpi.score * kpi.weight), 0);
             const overallScore = parseFloat((weightedScore / totalWeight).toFixed(2));
@@ -998,36 +1129,37 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
         <div>
             <PageTitle title="Manajemen Kinerja" />
             <Card>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-gray-100">
-                                <th className="p-3">Karyawan</th>
-                                <th className="p-3">Jabatan</th>
-                                <th className="p-3">Penilaian Terakhir</th>
-                                <th className="p-3">Skor Terakhir</th>
-                                <th className="p-3">Aksi</th>
+                <div className="table-responsive">
+                    <table className="table table-hover align-middle">
+                        <thead className="table-light">
+                            <tr>
+                                <th scope="col" className="py-3">Karyawan</th>
+                                <th scope="col" className="py-3">Jabatan</th>
+                                <th scope="col" className="py-3">Penilaian Terakhir</th>
+                                <th scope="col" className="py-3">Skor Terakhir</th>
+                                <th scope="col" className="py-3">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             {employees.filter(e => e.isActive).map(emp => {
                                 const user = users.find(u => u.employeeDetails?.id === emp.id);
-                                // Filter out employees without corresponding users
                                 if (!user) return null;
                                 
                                 const lastReview = performanceReviews.filter(r => r.employeeId === emp.id).sort((a,b) => new Date(b.reviewDate).getTime() - new Date(a.reviewDate).getTime())[0];
                                 return (
-                                    <tr key={emp.id} className="border-b">
-                                        <td className="p-3 flex items-center">
-                                            <img src={emp.avatarUrl} className="w-10 h-10 rounded-full object-cover mr-3" alt={user?.name} />
-                                            {user?.name}
+                                    <tr key={emp.id}>
+                                        <td>
+                                            <div className="d-flex align-items-center">
+                                                <img src={emp.avatarUrl} className="rounded-circle me-3" width="40" height="40" alt={user?.name} />
+                                                <span>{user?.name}</span>
+                                            </div>
                                         </td>
-                                        <td className="p-3">{emp.position}</td>
-                                        <td className="p-3">{lastReview?.period || 'Belum ada'}</td>
-                                        <td className="p-3">{lastReview?.overallScore || '-'}</td>
-                                        <td className="p-3">
-                                            <Button variant="secondary" className="mr-2 text-xs">Lihat Riwayat</Button>
-                                            <Button onClick={() => user && openFormModal({id: emp.id, name: user.name})} className="text-xs">Buat Penilaian</Button>
+                                        <td>{emp.position}</td>
+                                        <td>{lastReview?.period || 'Belum ada'}</td>
+                                        <td>{lastReview?.overallScore || '-'}</td>
+                                        <td className="text-nowrap">
+                                            <Button variant="secondary" size="sm" className="me-2">Lihat Riwayat</Button>
+                                            <Button onClick={() => user && openFormModal({id: emp.id, name: user.name})} size="sm">Buat Penilaian</Button>
                                         </td>
                                     </tr>
                                 );
@@ -1038,7 +1170,7 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
             </Card>
             {isFormModalOpen && selectedEmployee && (
                 <PerformanceReviewFormModal 
-                    employee={selectedEmployee} 
+                    employee={selectedEmployee}
                     onSave={handleSaveReview}
                     onClose={() => setFormModalOpen(false)}
                 />
@@ -1047,7 +1179,7 @@ const PerformanceReviewFormModal: React.FC<{ employee: {id: string, name: string
     );
 };
 
-const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (employeeId: string, payrollInfo: PayrollInfo) => void; onClose: () => void; }> = ({ employee, user, onSave, onClose }) => {
+const PayrollSettingsModal: React.FC <{ employee: Employee; user: User; onSave: (employeeId: string, payrollInfo: PayrollInfo) => void; onClose: () => void; show: boolean; }> = ({ employee, user, onSave, onClose, show }) => {
     const [payrollInfo, setPayrollInfo] = useState<PayrollInfo>(employee.payrollInfo);
 
     const handleBaseSalaryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1062,9 +1194,9 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
     };
 
     const addComponent = (type: 'incomes' | 'deductions') => {
-        const newComponent: PayComponent = { id: `comp-${Date.now()}`, name: '', amount: 0 };
+        const newComponent: PayComponent = { id: `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name: '', amount: 0 };
         setPayrollInfo({ ...payrollInfo, [type]: [...payrollInfo[type], newComponent] });
-    }
+    } 
     
     const removeComponent = (index: number, type: 'incomes' | 'deductions') => {
         const components = [...payrollInfo[type]];
@@ -1074,43 +1206,48 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log("PayrollSettingsModal: handleSubmit called");
         onSave(employee.id, payrollInfo);
     };
 
     return (
-        <Modal isOpen={true} onClose={onClose} title={`Kelola Gaji: ${user.name}`}>
-            <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
-                <Input label="Gaji Pokok" type="number" value={payrollInfo.baseSalary} onChange={handleBaseSalaryChange} />
+        <Modal show={show} onHide={onClose} size="lg">
+            <Modal.Header closeButton>
+                <Modal.Title>{`Kelola Gaji: ${user.name}`}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{maxHeight: '70vh', overflowY: 'auto'}}>
+                <Form id="payroll-settings-form" onSubmit={handleSubmit}>
+                    <Input label="Gaji Pokok" type="number" value={payrollInfo.baseSalary} onChange={handleBaseSalaryChange} />
 
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Komponen Pendapatan</legend>
-                    {payrollInfo.incomes.map((income, index) => (
-                        <div key={income.id} className="grid grid-cols-12 gap-2 mb-2 items-center">
-                            <div className="col-span-6"><Input label="" name="name" value={income.name} onChange={e => handleComponentChange(index, 'incomes', e)} placeholder="Nama Tunjangan" /></div>
-                            <div className="col-span-5"><Input label="" name="amount" type="number" value={income.amount} onChange={e => handleComponentChange(index, 'incomes', e)} placeholder="Jumlah" /></div>
-                            <button type="button" onClick={() => removeComponent(index, 'incomes')} className="col-span-1 text-red-500 hover:text-red-700 mt-5">&times;</button>
-                        </div>
-                    ))}
-                    <Button type="button" variant="secondary" onClick={() => addComponent('incomes')}>+ Tambah Pendapatan</Button>
-                </fieldset>
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Komponen Pendapatan</legend>
+                        {payrollInfo.incomes.map((income, index) => (
+                            <div key={income.id} className="row g-2 mb-2 align-items-center">
+                                <div className="col-6"><Input label="" name="name" value={income.name} onChange={e => handleComponentChange(index, 'incomes', e)} placeholder="Nama Tunjangan" /></div>
+                                <div className="col-5"><Input label="" name="amount" type="number" value={income.amount} onChange={e => handleComponentChange(index, 'incomes', e)} placeholder="Jumlah" /></div>
+                                <div className="col-1"><button type="button" onClick={() => removeComponent(index, 'incomes')} className="btn-close"></button></div>
+                            </div>
+                        ))}
+                        <Button type="button" variant="secondary" onClick={() => addComponent('incomes')}>+ Tambah Pendapatan</Button>
+                    </fieldset>
 
-                <fieldset className="border p-4 rounded-md">
-                    <legend className="px-2 font-semibold">Komponen Potongan</legend>
-                    {payrollInfo.deductions.map((deduction, index) => (
-                        <div key={deduction.id} className="grid grid-cols-12 gap-2 mb-2 items-center">
-                            <div className="col-span-6"><Input label="" name="name" value={deduction.name} onChange={e => handleComponentChange(index, 'deductions', e)} placeholder="Nama Potongan" /></div>
-                            <div className="col-span-5"><Input label="" name="amount" type="number" value={deduction.amount} onChange={e => handleComponentChange(index, 'deductions', e)} placeholder="Jumlah" /></div>
-                            <button type="button" onClick={() => removeComponent(index, 'deductions')} className="col-span-1 text-red-500 hover:text-red-700 mt-5">&times;</button>
-                        </div>
-                    ))}
-                    <Button type="button" variant="secondary" onClick={() => addComponent('deductions')}>+ Tambah Potongan</Button>
-                </fieldset>
-                
-                <div className="flex justify-end pt-4">
-                    <Button type="button" variant="secondary" onClick={onClose} className="mr-2">Batal</Button>
-                    <Button type="submit">Simpan Pengaturan</Button>
-                </div>
-            </form>
+                    <fieldset className="border p-3 rounded mb-4">
+                        <legend className="px-2 h6">Komponen Potongan</legend>
+                        {payrollInfo.deductions.map((deduction, index) => (
+                            <div key={deduction.id} className="row g-2 mb-2 align-items-center">
+                                <div className="col-6"><Input label="" name="name" value={deduction.name} onChange={e => handleComponentChange(index, 'deductions', e)} placeholder="Nama Potongan" /></div>
+                                <div className="col-5"><Input label="" name="amount" type="number" value={deduction.amount} onChange={e => handleComponentChange(index, 'deductions', e)} placeholder="Jumlah" /></div>
+                                <div className="col-1"><button type="button" onClick={() => removeComponent(index, 'deductions')} className="btn-close"></button></div>
+                            </div>
+                        ))}
+                        <Button type="button" variant="secondary" onClick={() => addComponent('deductions')}>+ Tambah Potongan</Button>
+                    </fieldset>
+                </Form>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={onClose}>Batal</Button>
+                <Button type="submit" form="payroll-settings-form">Simpan Pengaturan</Button>
+            </Modal.Footer>
         </Modal>
     );
 };
@@ -1137,6 +1274,7 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
     };
 
     const handleSavePayroll = async (employeeId: string, payrollInfo: PayrollInfo) => {
+        console.log("PayrollManagement: handleSavePayroll called", { employeeId, payrollInfo });
         try {
             await api.updatePayrollInfo(employeeId, payrollInfo);
             addToast("Pengaturan gaji berhasil disimpan.", 'success');
@@ -1151,31 +1289,32 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
         <div>
             <PageTitle title="Manajemen Penggajian" />
              <Card>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-gray-100">
-                                <th className="p-3">Karyawan</th>
-                                <th className="p-3">Jabatan</th>
-                                <th className="p-3">Gaji Pokok</th>
-                                <th className="p-3">Aksi</th>
+                <div className="table-responsive">
+                    <table className="table table-hover align-middle">
+                        <thead className="table-light">
+                            <tr>
+                                <th scope="col" className="py-3">Karyawan</th>
+                                <th scope="col" className="py-3">Jabatan</th>
+                                <th scope="col" className="py-3">Gaji Pokok</th>
+                                <th scope="col" className="py-3">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             {employees.map(emp => {
                                 const user = users.find(u => u.employeeDetails?.id === emp.id);
-                                // Filter out employees without corresponding users
                                 if (!user) return null;
                                 
                                 return (
-                                <tr key={emp.id} className="border-b">
-                                    <td className="p-3 flex items-center">
-                                        <img src={emp.avatarUrl} className="w-10 h-10 rounded-full object-cover mr-3" alt={user?.name}/>
-                                        {user?.name || 'Tidak Dikenal'}
+                                <tr key={emp.id}>
+                                    <td>
+                                        <div className="d-flex align-items-center">
+                                            <img src={emp.avatarUrl} className="rounded-circle me-3" width="40" height="40" alt={user?.name}/>
+                                            <span>{user?.name || 'Tidak Dikenal'}</span>
+                                        </div>
                                     </td>
-                                    <td className="p-3">{emp.position}</td>
-                                    <td className="p-3">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(emp.payrollInfo.baseSalary)}</td>
-                                    <td className="p-3">
+                                    <td>{emp.position}</td>
+                                    <td>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(emp.payrollInfo.baseSalary)}</td>
+                                    <td>
                                         <Button onClick={() => openModal(emp)}>Kelola Gaji</Button>
                                     </td>
                                 </tr>
@@ -1190,12 +1329,13 @@ const PayrollSettingsModal: React.FC<{ employee: Employee; user: User; onSave: (
                     user={selectedEmployee.user}
                     onClose={closeModal}
                     onSave={handleSavePayroll}
+                    show={isModalOpen}
                 />
             )}
         </div>
     );
 }
-const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> = ({ reportName, onClose }) => {
+const EmailReportModal: React.FC <{ reportName: string; onClose: () => void; }> = ({ reportName, onClose }) => {
     const [email, setEmail] = useState('');
     const { addToast } = useToast();
     const { user } = useContext(AuthContext);
@@ -1205,7 +1345,6 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
         if (!email) return;
 
         try {
-            // Using a generic endpoint for simulation purposes
             await api.submitDataChangeRequest(`Sending ${reportName} to ${email}`, user?.employeeDetails?.id, user?.name);
             addToast(`${reportName} berhasil dikirim ke ${email}`, 'success');
             onClose();
@@ -1215,21 +1354,26 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
     };
 
     return (
-        <Modal isOpen={true} onClose={onClose} title={`Kirim ${reportName} via Email`}>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <Input
-                    label="Alamat Email Penerima"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="contoh@perusahaan.com"
-                    required
-                />
-                <div className="flex justify-end pt-2">
-                    <Button type="button" variant="secondary" onClick={onClose} className="mr-2">Batal</Button>
-                    <Button type="submit" disabled={!email}>Kirim</Button>
-                </div>
-            </form>
+        <Modal show={true} onHide={onClose}>
+            <Modal.Header closeButton>
+                <Modal.Title>{`Kirim ${reportName} via Email`}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+                <Form onSubmit={handleSubmit}>
+                    <Input
+                        label="Alamat Email Penerima"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="contoh@perusahaan.com"
+                        required
+                    />
+                </Form>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={onClose}>Batal</Button>
+                <Button type="submit" disabled={!email}>Kirim</Button>
+            </Modal.Footer>
         </Modal>
     );
 };
@@ -1258,7 +1402,6 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
             case 'employee':
                 data = db.employees.map(e => {
                     const user = db.users.find(u => u.employeeDetails?.id === e.id);
-                    // Filter out employees without corresponding users
                     if (!user) return null;
                     
                     return {
@@ -1301,7 +1444,6 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
             case 'payroll':
                 data = db.employees.map(e => {
                     const user = db.users.find(u => u.employeeDetails?.id === e.id);
-                    // Filter out employees without corresponding users
                     if (!user) return null;
                     
                     return {
@@ -1323,45 +1465,43 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
     return (
         <div>
             <PageTitle title="Laporan" />
-            <Card>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="border p-4 rounded-md space-y-4">
-                        <h3 className="font-semibold text-lg">Laporan Rekap Karyawan</h3>
-                        <p className="text-gray-600">Unduh rekap laporan data karyawan.</p>
-                        <div className="space-x-2">
-                            <Button onClick={() => handleDownloadRekap('employee')}>Unduh Excel</Button>
-                        </div>
-                    </div>
-                    <div className="border p-4 rounded-md space-y-4">
-                        <h3 className="font-semibold text-lg">Laporan Rekap Absensi</h3>
-                        <p className="text-gray-600">Unduh rekap laporan absensi.</p>
-                        <div className="space-x-2">
-                            <Button onClick={() => handleDownloadRekap('attendance')}>Unduh Excel</Button>
-                        </div>
-                    </div>
-                    <div className="border p-4 rounded-md space-y-4">
-                        <h3 className="font-semibold text-lg">Laporan Rekap Pengajuan Cuti</h3>
-                        <p className="text-gray-600">Unduh rekap laporan pengajuan cuti.</p>
-                        <div className="space-x-2">
-                            <Button onClick={() => handleDownloadRekap('leave')}>Unduh Excel</Button>
-                        </div>
-                    </div>
-                    <div className="border p-4 rounded-md space-y-4">
-                        <h3 className="font-semibold text-lg">Laporan Rekap Permintaan Data</h3>
-                        <p className="text-gray-600">Unduh rekap laporan permintaan data.</p>
-                        <div className="space-x-2">
-                            <Button onClick={() => handleDownloadRekap('data-change')}>Unduh Excel</Button>
-                        </div>
-                    </div>
-                    <div className="border p-4 rounded-md space-y-4">
-                        <h3 className="font-semibold text-lg">Laporan Rekap Penggajian</h3>
-                        <p className="text-gray-600">Unduh rekap laporan penggajian.</p>
-                        <div className="space-x-2">
-                            <Button onClick={() => handleDownloadRekap('payroll')}>Unduh Excel</Button>
-                        </div>
-                    </div>
+            <div className="row g-4">
+                <div className="col-md-6">
+                    <Card>
+                        <h3 className="card-title h5">Laporan Rekap Karyawan</h3>
+                        <p className="card-text text-muted">Unduh rekap laporan data karyawan.</p>
+                        <Button onClick={() => handleDownloadRekap('employee')}>Unduh Excel</Button>
+                    </Card>
                 </div>
-            </Card>
+                <div className="col-md-6">
+                    <Card>
+                        <h3 className="card-title h5">Laporan Rekap Absensi</h3>
+                        <p className="card-text text-muted">Unduh rekap laporan absensi.</p>
+                        <Button onClick={() => handleDownloadRekap('attendance')}>Unduh Excel</Button>
+                    </Card>
+                </div>
+                <div className="col-md-6">
+                    <Card>
+                        <h3 className="card-title h5">Laporan Rekap Pengajuan Cuti</h3>
+                        <p className="card-text text-muted">Unduh rekap laporan pengajuan cuti.</p>
+                        <Button onClick={() => handleDownloadRekap('leave')}>Unduh Excel</Button>
+                    </Card>
+                </div>
+                <div className="col-md-6">
+                    <Card>
+                        <h3 className="card-title h5">Laporan Rekap Permintaan Data</h3>
+                        <p className="card-text text-muted">Unduh rekap laporan permintaan data.</p>
+                        <Button onClick={() => handleDownloadRekap('data-change')}>Unduh Excel</Button>
+                    </Card>
+                </div>
+                <div className="col-md-6">
+                    <Card>
+                        <h3 className="card-title h5">Laporan Rekap Penggajian</h3>
+                        <p className="card-text text-muted">Unduh rekap laporan penggajian.</p>
+                        <Button onClick={() => handleDownloadRekap('payroll')}>Unduh Excel</Button>
+                    </Card>
+                </div>
+            </div>
             {isEmailModalOpen && (
                 <EmailReportModal 
                     reportName={selectedReport}
@@ -1408,10 +1548,10 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
 
     const statusColor = (status: string) => {
         switch(status) {
-            case 'Pending': return 'bg-yellow-100 text-yellow-800';
-            case 'Approved': return 'bg-green-100 text-green-800';
-            case 'Rejected': return 'bg-red-100 text-red-800';
-            default: return 'bg-gray-100 text-gray-800';
+            case 'Pending': return 'bg-warning-subtle text-warning-emphasis';
+            case 'Approved': return 'bg-success-subtle text-success-emphasis';
+            case 'Rejected': return 'bg-danger-subtle text-danger-emphasis';
+            default: return 'bg-secondary-subtle text-secondary-emphasis';
         }
     };
 
@@ -1419,29 +1559,29 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
         <div>
             <PageTitle title="Permintaan Perubahan Data" />
             <Card>
-                 <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="bg-gray-100">
-                            <th className="p-3">Karyawan</th>
-                            <th className="p-3">Tanggal</th>
-                            <th className="p-3">Pesan</th>
-                            <th className="p-3">Status</th>
-                            <th className="p-3">Aksi</th>
+                 <div className="table-responsive">
+                <table className="table table-hover align-middle">
+                    <thead className="table-light">
+                        <tr>
+                            <th scope="col" className="py-3">Karyawan</th>
+                            <th scope="col" className="py-3">Tanggal</th>
+                            <th scope="col" className="py-3">Pesan</th>
+                            <th scope="col" className="py-3">Status</th>
+                            <th scope="col" className="py-3">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         {db?.dataChangeRequests.map(req => (
-                            <tr key={req.id} className="border-b">
-                                <td className="p-3">{req.employeeName}</td>
-                                <td className="p-3">{req.requestDate}</td>
-                                <td className="p-3 max-w-xs truncate" title={req.message}>{req.message}</td>
-                                <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColor(req.status)}`}>{req.status}</span></td>
-                                <td className="p-3">
-                                    {req.status === 'Pending' && (
+                            <tr key={req.id}>
+                                <td>{req.employeeName}</td>
+                                <td>{req.requestDate}</td>
+                                <td style={{maxWidth: '200px'}} className="text-truncate" title={req.message}>{req.message}</td>
+                                <td><span className={`badge ${statusColor(req.status)}`}>{req.status}</span></td>
+                                <td className="text-nowrap">
+                                    {req.status.toLowerCase() === 'pending' && (
                                         <>
-                                            <Button variant="success" onClick={() => handleApprove(req.id)} className="mr-2 text-xs">Setujui</Button>
-                                            <Button variant="danger" onClick={() => handleReject(req.id)} className="text-xs">Tolak</Button>
+                                            <Button variant="success" size="sm" onClick={() => handleApprove(req.id)} className="me-2">Setujui</Button>
+                                            <Button variant="danger" size="sm" onClick={() => handleReject(req.id)}>Tolak</Button>
                                         </>
                                     )}
                                 </td>
@@ -1451,10 +1591,13 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
                 </table>
                 </div>
             </Card>
-            <Modal isOpen={actionModalState.isOpen} onClose={closeActionModal} title={actionModalState.action === 'approve' ? "Konfirmasi Persetujuan" : "Alasan Penolakan"}>
-                <div className="space-y-4">
+            <Modal show={actionModalState.isOpen} onHide={closeActionModal}>
+                <Modal.Header closeButton>
+                    <Modal.Title>{actionModalState.action === 'approve' ? "Konfirmasi Persetujuan" : "Alasan Penolakan"}</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
                     {actionModalState.action === 'reject' ? (
-                        <>
+                        <React.Fragment>
                             <Textarea
                                 label="Mohon berikan alasan penolakan permintaan ini."
                                 value={rejectionReason}
@@ -1462,21 +1605,24 @@ const EmailReportModal: React.FC<{ reportName: string; onClose: () => void; }> =
                                 required
                                 rows={3}
                             />
-                            <div className="flex justify-end pt-2">
-                                <Button type="button" variant="secondary" onClick={closeActionModal} className="mr-2">Batal</Button>
-                                <Button variant="danger" onClick={handleActionSubmit} disabled={!rejectionReason.trim()}>Kirim Penolakan</Button>
-                            </div>
-                        </>
+                        </React.Fragment>
                     ) : (
-                        <>
-                            <p>Apakah Anda yakin ingin menyetujui permintaan perubahan data ini?</p>
-                            <div className="flex justify-end pt-2">
-                                <Button type="button" variant="secondary" onClick={closeActionModal} className="mr-2">Batal</Button>
-                                <Button variant="success" onClick={handleActionSubmit}>Konfirmasi</Button>
-                            </div>
-                        </>
+                        <p>Apakah Anda yakin ingin menyetujui permintaan perubahan data ini?</p>
                     )}
-                </div>
+                </Modal.Body>
+                <Modal.Footer>
+                    {actionModalState.action === 'reject' ? (
+                        <React.Fragment>
+                            <Button variant="secondary" onClick={closeActionModal}>Batal</Button>
+                            <Button variant="danger" onClick={handleActionSubmit} disabled={!rejectionReason.trim()}>Kirim Penolakan</Button>
+                        </React.Fragment>
+                    ) : (
+                        <React.Fragment>
+                            <Button variant="secondary" onClick={closeActionModal}>Batal</Button>
+                            <Button variant="success" onClick={handleActionSubmit}>Konfirmasi</Button>
+                        </React.Fragment>
+                    )}
+                </Modal.Footer>
             </Modal>
         </div>
     );
@@ -1537,22 +1683,24 @@ const UserManagement: React.FC = () => {
         
         try {
             if (selectedUser) {
-                // Update existing user
-                await api.updateUser(selectedUser.id, {
+                const userData: { name: string; email: string; role: string; password?: string } = {
                     name: formData.name,
                     email: formData.email,
-                    role: formData.role
-                });
-                addToast('Pengguna berhasil diperbarui', 'success');
+                    role: formData.role,
+                };
+                if (formData.password) {
+                    userData.password = formData.password;
+                }
+                const response = await api.updateUser(selectedUser.id, userData);
+                addToast(response.message, 'success');
             } else {
-                // Create new user
                 if (!formData.password) {
                     addToast('Kata sandi harus diisi untuk pengguna baru', 'error');
                     setIsLoading(false);
                     return;
                 }
                 
-                await api.createUser({
+                const response = await api.createUser({
                     name: formData.name,
                     email: formData.email,
                     password: formData.password,
@@ -1599,7 +1747,7 @@ const UserManagement: React.FC = () => {
                 <Button onClick={() => openFormModal()}>Tambah Pengguna Baru</Button>
             </PageTitle>
             
-            <Card className="mb-6">
+            <Card className="mb-4">
                 <Input 
                     label="Cari Pengguna" 
                     placeholder="Cari berdasarkan nama atau email..." 
@@ -1609,42 +1757,43 @@ const UserManagement: React.FC = () => {
             </Card>
             
             <Card>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-gray-100">
-                                <th className="p-3">Nama</th>
-                                <th className="p-3">Email</th>
-                                <th className="p-3">Peran</th>
-                                <th className="p-3">Aksi</th>
+                <div className="table-responsive">
+                    <table className="table table-hover align-middle">
+                        <thead className="table-light">
+                            <tr>
+                                <th scope="col" className="py-3">Nama</th>
+                                <th scope="col" className="py-3">Email</th>
+                                <th scope="col" className="py-3">Peran</th>
+                                <th scope="col" className="py-3">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredUsers.map(user => (
-                                <tr key={user.id} className="border-b">
-                                    <td className="p-3">{user.name}</td>
-                                    <td className="p-3">{user.email}</td>
-                                    <td className="p-3">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                <tr key={user.id}>
+                                    <td>{user.name}</td>
+                                    <td>{user.email}</td>
+                                    <td>
+                                        <span className={`badge ${ 
                                             user.role === 'ADMIN' 
-                                                ? 'bg-purple-100 text-purple-800' 
-                                                : 'bg-blue-100 text-blue-800'
+                                                ? 'bg-primary-subtle text-primary-emphasis' 
+                                                : 'bg-secondary-subtle text-secondary-emphasis'
                                         }`}>
                                             {user.role}
                                         </span>
                                     </td>
-                                    <td className="p-3 whitespace-nowrap">
+                                    <td className="text-nowrap">
                                         <Button 
                                             variant="secondary" 
+                                            size="sm"
                                             onClick={() => openFormModal(user)} 
-                                            className="mr-2 text-xs py-1"
+                                            className="me-2"
                                         >
                                             Ubah
                                         </Button>
                                         <Button 
                                             variant="danger" 
-                                            onClick={() => handleDelete(user.id, user.name)} 
-                                            className="text-xs py-1"
+                                            size="sm"
+                                            onClick={() => handleDelete(user.id, user.name)}
                                             disabled={user.role === 'ADMIN' && users.filter(u => u.role === 'ADMIN').length <= 1}
                                         >
                                             Hapus
@@ -1654,7 +1803,7 @@ const UserManagement: React.FC = () => {
                             ))}
                             {filteredUsers.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="text-center p-4 text-gray-500">
+                                    <td colSpan={4} className="text-center p-4 text-muted">
                                         Tidak ada pengguna yang ditemukan.
                                     </td>
                                 </tr>
@@ -1666,68 +1815,231 @@ const UserManagement: React.FC = () => {
             
             {isFormModalOpen && (
                 <Modal 
-                    isOpen={true} 
-                    onClose={closeFormModal} 
-                    title={selectedUser ? "Ubah Pengguna" : "Tambah Pengguna Baru"}
-                >
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <Input
-                            label="Nama Lengkap"
-                            name="name"
-                            value={formData.name}
-                            onChange={handleInputChange}
-                            required
-                        />
-                        
-                        <Input
-                            label="Email"
-                            name="email"
-                            type="email"
-                            value={formData.email}
-                            onChange={handleInputChange}
-                            required
-                        />
-                        
-                        {!selectedUser && (
+                    show={isFormModalOpen} 
+                    onHide={closeFormModal} 
+                > 
+                    <Modal.Header closeButton>
+                        <Modal.Title>{selectedUser ? "Ubah Pengguna" : "Tambah Pengguna Baru"}</Modal.Title>
+                    </Modal.Header>
+                    <Modal.Body>
+                        <Form onSubmit={handleSubmit}>
                             <Input
-                                label="Kata Sandi"
+                                label="Nama Lengkap"
+                                name="name"
+                                value={formData.name}
+                                onChange={handleInputChange}
+                                required
+                            />
+                            
+                            <Input
+                                label="Email"
+                                name="email"
+                                type="email"
+                                value={formData.email}
+                                onChange={handleInputChange}
+                                required
+                            />
+                            
+                            <Input
+                                label="Kata Sandi Baru (opsional)"
                                 name="password"
                                 type="password"
                                 value={formData.password}
                                 onChange={handleInputChange}
-                                required={!selectedUser}
-                                placeholder="Masukkan kata sandi"
+                                required={!selectedUser} // Only required for new users
+                                placeholder={selectedUser ? "Isi untuk mengganti kata sandi" : "Masukkan kata sandi"}
                             />
-                        )}
-                        
-                        <Select
-                            label="Peran"
-                            name="role"
-                            value={formData.role}
-                            onChange={handleInputChange}
+                            
+                            <Select
+                                label="Peran"
+                                name="role"
+                                value={formData.role}
+                                onChange={handleInputChange}
+                            >
+                                <option value="EMPLOYEE">Karyawan</option>
+                                <option value="ADMIN">Administrator</option>
+                            </Select>
+                        </Form>
+                    </Modal.Body>
+                    <Modal.Footer>
+                        <Button 
+                            variant="secondary" 
+                            onClick={closeFormModal}
                         >
-                            <option value="EMPLOYEE">Karyawan</option>
-                            <option value="ADMIN">Administrator</option>
-                        </Select>
-                        
-                        <div className="flex justify-end pt-4">
-                            <Button 
-                                type="button" 
-                                variant="secondary" 
-                                onClick={closeFormModal} 
-                                className="mr-2"
-                            >
-                                Batal
-                            </Button>
-                            <Button 
-                                type="submit" 
-                                disabled={isLoading}
-                            >
-                                {isLoading ? 'Menyimpan...' : 'Simpan'}
-                            </Button>
-                        </div>
-                    </form>
+                            Batal
+                        </Button>
+                        <Button 
+                            type="submit" 
+                            disabled={isLoading}
+                        >
+                            {isLoading ? 'Menyimpan...' : 'Simpan'}
+                        </Button>
+                    </Modal.Footer>
                 </Modal>
+            )}
+        </div>
+    );
+};
+
+const AnnouncementFormModal: React.FC <{
+    announcement: Announcement | null;
+    onSave: (data: Omit<Announcement, 'id' | 'createdAt'>) => void;
+    onClose: () => void;
+    isLoading: boolean;
+}> = ({ announcement, onSave, onClose, isLoading }) => {
+    const [formData, setFormData] = useState({
+        title: announcement?.title || '',
+        message: announcement?.message || '',
+        author: announcement?.author || 'Admin',
+    });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave(formData);
+    };
+
+    return (
+        <Modal show={true} onHide={onClose} centered>
+            <Modal.Header closeButton>
+                <Modal.Title>{announcement ? 'Ubah Pengumuman' : 'Buat Pengumuman Baru'}</Modal.Title>
+            </Modal.Header>
+            <Form onSubmit={handleSubmit}>
+                <Modal.Body>
+                    <Input
+                        label="Judul"
+                        name="title"
+                        value={formData.title}
+                        onChange={handleChange}
+                        required
+                    />
+                    <Textarea
+                        label="Pesan Pengumuman"
+                        name="message"
+                        value={formData.message}
+                        onChange={handleChange}
+                        required
+                        rows={5}
+                    />
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={onClose}>Batal</Button>
+                    <Button type="submit" disabled={isLoading}>
+                        {isLoading ? 'Menyimpan...' : 'Simpan'}
+                    </Button>
+                </Modal.Footer>
+            </Form>
+        </Modal>
+    );
+};
+
+const AnnouncementManagement: React.FC = () => {
+    const { db, refreshData } = useData();
+    const { addToast } = useToast();
+    const announcements = db!.announcements || [];
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const openModal = (announcement: Announcement | null = null) => {
+        setSelectedAnnouncement(announcement);
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setSelectedAnnouncement(null);
+        setIsModalOpen(false);
+    };
+
+    const handleSave = async (data: Omit<Announcement, 'id' | 'createdAt'>) => {
+        setIsLoading(true);
+        try {
+            if (selectedAnnouncement) {
+                await api.updateAnnouncement(selectedAnnouncement.id, { title: data.title, message: data.message });
+                addToast('Pengumuman berhasil diperbarui', 'success');
+            } else {
+                await api.createAnnouncement({ title: data.title, message: data.message });
+                addToast('Pengumuman berhasil dibuat', 'success');
+            }
+            await refreshData();
+            closeModal();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Gagal menyimpan pengumuman';
+            addToast(errorMessage, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('Apakah Anda yakin ingin menghapus pengumuman ini?')) {
+            return;
+        }
+        try {
+            await api.deleteAnnouncement(id);
+            addToast('Pengumuman berhasil dihapus', 'success');
+            await refreshData();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Gagal menghapus pengumuman';
+            addToast(errorMessage, 'error');
+        }
+    };
+
+    return (
+        <div>
+            <PageTitle title="Manajemen Pengumuman">
+                <Button onClick={() => openModal()}>Buat Pengumuman Baru</Button>
+            </PageTitle>
+            <Card>
+                <div className="table-responsive">
+                    <table className="table table-hover align-middle">
+                        <thead className="table-light">
+                            <tr>
+                                <th scope="col" className="py-3">Judul</th>
+                                <th scope="col" className="py-3">Dibuat Pada</th>
+                                <th scope="col" className="py-3">Oleh</th>
+                                <th scope="col" className="py-3">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {announcements.map(ann => (
+                                <tr key={ann.id}>
+                                    <td>{ann.title}</td>
+                                    <td>{new Date(ann.createdAt).toLocaleString('id-ID')}</td>
+                                    <td>{ann.author}</td>
+                                    <td className="text-nowrap">
+                                        <Button variant="secondary" size="sm" onClick={() => openModal(ann)} className="me-2">
+                                            Ubah
+                                        </Button>
+                                        <Button variant="danger" size="sm" onClick={() => handleDelete(ann.id)}>
+                                            Hapus
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {announcements.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="text-center p-4 text-muted">
+                                        Belum ada pengumuman.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+            {isModalOpen && (
+                <AnnouncementFormModal
+                    announcement={selectedAnnouncement}
+                    onSave={handleSave}
+                    onClose={closeModal}
+                    isLoading={isLoading}
+                />
             )}
         </div>
     );
@@ -1735,12 +2047,42 @@ const UserManagement: React.FC = () => {
 
 export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState('dashboard');
-    const { db } = useData();
+    const { db, refreshData } = useData();
     
     if (!db) return null; // or a loading spinner
 
+    // Refresh data when dashboard is active to ensure notifications are up to date
+    useEffect(() => {
+        // Refresh immediately when dashboard becomes active
+        if (activeView === 'dashboard') {
+            refreshData();
+        }
+        
+        // Set up periodic refresh every 30 seconds when on dashboard
+        let intervalId: NodeJS.Timeout | null = null;
+        if (activeView === 'dashboard') {
+            intervalId = setInterval(() => {
+                refreshData();
+            }, 30000); // 30 seconds
+        }
+        
+        // Clean up interval on unmount or when activeView changes
+        return () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+        };
+    }, [activeView, refreshData]);
+
+    // Also refresh data when switching to the data requests view
+    useEffect(() => {
+        if (activeView === 'data-requests') {
+            refreshData();
+        }
+    }, [activeView, refreshData]);
+
     const pendingRequestsCount = useMemo(() => db.leaveRequests.filter(r => r.status === LeaveStatus.PENDING).length, [db.leaveRequests]);
-            const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status === 'Pending').length, [db.dataChangeRequests]);
+    const pendingDataChangeRequestsCount = useMemo(() => db.dataChangeRequests.filter(r => r.status.toLowerCase() === 'pending').length, [db.dataChangeRequests]);
 
     const navLinksWithBadge = useMemo(() => {
         return ADMIN_NAV_LINKS.map(link => {
@@ -1764,8 +2106,10 @@ export const AdminPage: React.FC = () => {
             case 'data-requests': return <DataChangeRequests />;
             case 'performance': return <PerformanceManagement />;
             case 'payroll': return <PayrollManagement />;
+            case 'announcements': return <AnnouncementManagement />;
             case 'users': return <UserManagement />;
             case 'reports': return <Reports />;
+            case 'settings': return <SettingsPage />;
             default: return <AdminDashboard pendingRequestsCount={pendingRequestsCount} pendingDataChangeRequestsCount={pendingDataChangeRequestsCount} setActiveView={setActiveView}/>;
         }
     };
@@ -1776,3 +2120,4 @@ export const AdminPage: React.FC = () => {
         </Layout>
     );
 };
+          

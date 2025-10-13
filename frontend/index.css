@@ -2,6 +2,10 @@
 @import 'bootstrap/dist/css/bootstrap.min.css';
 @import 'bootstrap-icons/font/bootstrap-icons.css';
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Custom styles can be added here */
 .sidebar {
   width: 280px;
