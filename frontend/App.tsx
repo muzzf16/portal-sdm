@@ -8,6 +8,7 @@ import { EmployeePage } from './pages/Employee';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './context/ToastContext';
 import { LandingPage } from './pages/Landing';
+import { ResetPasswordPage } from './pages/ResetPassword';
 
 interface AuthContextType {
     user: User | null;
@@ -84,6 +85,7 @@ const App: React.FC = () => {
                                     <Route path="/login" element={<LoginPage />} />
                                     <Route path="/register" element={<Navigate to="/login" replace />} />
                                     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                                    <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
                                     
                                     {/* Redirect any other path to the landing page if not logged in */}
                                     <Route path="*" element={<Navigate to="/" replace />} />

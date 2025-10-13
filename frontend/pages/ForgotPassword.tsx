@@ -15,7 +15,7 @@ export const ForgotPasswordPage: React.FC = () => {
         setIsLoading(true);
 
         try {
-            await api.submitDataChangeRequest(email); // Using a generic endpoint for simulation
+            await api.forgotPassword(email);
             addToast('Jika email Anda terdaftar, Anda akan menerima tautan reset.', 'success');
             navigate('/login');
         } catch (error) {

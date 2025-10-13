@@ -56,11 +56,13 @@ interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, '
     label: string;
     size?: "sm" | "lg";
     value?: string | number | string[];
+    helperText?: string;
 }
-export const Input: React.FC<InputProps> = ({ label, id, size, ...props }) => (
+export const Input: React.FC<InputProps> = ({ label, id, size, helperText, ...props }) => (
     <Form.Group className="mb-3" controlId={id}>
         <Form.Label>{label}</Form.Label>
         <Form.Control size={size} {...props} />
+        {helperText && <Form.Text className="text-muted">{helperText}</Form.Text>}
     </Form.Group>
 );
 

@@ -29,6 +29,20 @@ const api = {
             body: JSON.stringify(credentials),
         }).then(handleResponse);
     },
+    forgotPassword: async (email: string) => {
+        return fetch(`${API_BASE_URL}/auth/forgot-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        }).then(handleResponse);
+    },
+    resetPassword: async (password: string, token: string) => {
+        return fetch(`${API_BASE_URL}/auth/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password, token }),
+        }).then(handleResponse);
+    },
 
     // --- Data Fetching ---
     getFullDatabase: () => {
@@ -72,7 +86,7 @@ const api = {
         }).then(handleResponse);
     },
 
-    updateUser: (id: string, userData: { name: string; email: string; role: string }) => {
+    updateUser: (id: string, userData: { name: string; email: string; role: string; password?: string }) => {
         return fetch(`${API_BASE_URL}/users/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -247,6 +261,16 @@ const api = {
         }).then(handleResponse);
     },
 
+    uploadCompanyLogo: (logoFile: File) => {
+        const formData = new FormData();
+        formData.append('logo', logoFile);
+
+        return fetch(`${API_BASE_URL}/settings/logo`, {
+            method: 'POST',
+            body: formData,
+        }).then(handleResponse);
+    },
+
     getHolidays: (): Promise<{ date: string, description: string }[]> => {
         return fetch(`${API_BASE_URL}/holidays`).then(handleResponse);
     },
@@ -259,12 +283,40 @@ const api = {
         }).then(handleResponse);
     },
 
-    deleteHoliday: (date: string) => del(`/holidays/${date}`),
+    deleteHoliday: (date: string) => {
+        return fetch(`${API_BASE_URL}/holidays/${date}`, {
+            method: 'DELETE',
+        }).then(handleResponse);
+    },
 
     // Notifications
-    getNotifications: () => get('/notifications'),
-    getUnreadNotifications: () => get('/notifications/unread'),
-    markNotificationAsRead: (id: string) => put(`/notifications/${id}/read`, {}),
+    getNotifications: () => {
+        const token = localStorage.getItem('token');
+        return fetch(`${API_BASE_URL}/notifications`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        }).then(handleResponse);
+    },
+    getUnreadNotifications: () => {
+        const token = localStorage.getItem('token');
+        return fetch(`${API_BASE_URL}/notifications/unread`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        }).then(handleResponse);
+    },
+    markNotificationAsRead: (id: string) => {
+        const token = localStorage.getItem('token');
+        return fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({}),
+        }).then(handleResponse);
+    },
 };
 
 export default api;

@@ -1683,12 +1683,16 @@ const UserManagement: React.FC = () => {
         
         try {
             if (selectedUser) {
-                await api.updateUser(selectedUser.id, {
+                const userData: { name: string; email: string; role: string; password?: string } = {
                     name: formData.name,
                     email: formData.email,
-                    role: formData.role
-                });
-                addToast('Pengguna berhasil diperbarui', 'success');
+                    role: formData.role,
+                };
+                if (formData.password) {
+                    userData.password = formData.password;
+                }
+                const response = await api.updateUser(selectedUser.id, userData);
+                addToast(response.message, 'success');
             } else {
                 if (!formData.password) {
                     addToast('Kata sandi harus diisi untuk pengguna baru', 'error');
@@ -1696,7 +1700,7 @@ const UserManagement: React.FC = () => {
                     return;
                 }
                 
-                await api.createUser({
+                const response = await api.createUser({
                     name: formData.name,
                     email: formData.email,
                     password: formData.password,
@@ -1836,17 +1840,15 @@ const UserManagement: React.FC = () => {
                                 required
                             />
                             
-                            {!selectedUser && (
-                                <Input
-                                    label="Kata Sandi"
-                                    name="password"
-                                    type="password"
-                                    value={formData.password}
-                                    onChange={handleInputChange}
-                                    required={!selectedUser}
-                                    placeholder="Masukkan kata sandi"
-                                />
-                            )}
+                            <Input
+                                label="Kata Sandi Baru (opsional)"
+                                name="password"
+                                type="password"
+                                value={formData.password}
+                                onChange={handleInputChange}
+                                required={!selectedUser} // Only required for new users
+                                placeholder={selectedUser ? "Isi untuk mengganti kata sandi" : "Masukkan kata sandi"}
+                            />
                             
                             <Select
                                 label="Peran"

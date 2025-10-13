@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const app = express();
 
@@ -130,10 +131,10 @@ const initializeDb = () => {
         // Create Tables
         db.exec(`
             CREATE TABLE IF NOT EXISTS employees (
-                id TEXT PRIMARY KEY, nip TEXT UNIQUE, position TEXT, pangkat TEXT, golongan TEXT, department TEXT, joinDate TEXT, avatarUrl TEXT, leaveBalance INTEGER, isActive INTEGER, address TEXT, phone TEXT, pob TEXT, dob TEXT, gender TEXT, religion TEXT, maritalStatus TEXT, numberOfChildren INTEGER, educationHistory TEXT, workHistory TEXT, trainingCertificates TEXT, payrollInfo TEXT
+                id TEXT PRIMARY KEY, nip TEXT UNIQUE, position TEXT, pangkat TEXT, golongan TEXT, department TEXT, joinDate TEXT, avatarUrl TEXT, leaveBalance INTEGER, isActive INTEGER, address TEXT, phone TEXT, pob TEXT, dob TEXT, gender TEXT, religion TEXT, maritalStatus TEXT, numberOfChildren INTEGER, educationHistory TEXT, workHistory TEXT, trainingCertificates TEXT, payrollInfo TEXT, nextPromotionDate TEXT
             );
             CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, role TEXT, employeeId TEXT,
+                id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, role TEXT, employeeId TEXT, resetPasswordToken TEXT, resetPasswordExpires INTEGER,
                 FOREIGN KEY (employeeId) REFERENCES employees(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS leaveRequests (
@@ -412,6 +413,58 @@ app.post('/api/auth/login', async (req, res) => {
         res.status(500).json({ "error": err.message });
     }
 });
+
+// POST forgot password
+app.post('/api/auth/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    try {
+        console.log(`API Request: POST /api/auth/forgot-password for email: ${email}`);
+        const user = await dbGet("SELECT * FROM users WHERE email = ?", [email]);
+        if (!user) {
+            console.log(`User not found: ${email}`);
+            // Still send a success message to prevent email enumeration
+            return res.json({ message: "If a user with that email exists, a password reset token has been generated." });
+        }
+
+        const token = crypto.randomBytes(20).toString('hex');
+        const expires = Date.now() + 3600000; // 1 hour
+
+        await dbRun("UPDATE users SET resetPasswordToken = ?, resetPasswordExpires = ? WHERE id = ?", [token, expires, user.id]);
+
+        console.log(`Password reset token for ${email}: ${token}`);
+
+        res.json({ message: "If a user with that email exists, a password reset token has been generated.", token }); // Sending token in response for simulation
+    } catch (err) {
+        console.error("Error in /api/auth/forgot-password endpoint:", err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
+// POST reset password
+app.post('/api/auth/reset-password', async (req, res) => {
+    const { token, password } = req.body;
+    try {
+        console.log(`API Request: POST /api/auth/reset-password for token: ${token}`);
+        const user = await dbGet("SELECT * FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > ?", [token, Date.now()]);
+
+        if (!user) {
+            console.log(`Invalid or expired password reset token: ${token}`);
+            return res.status(400).json({ message: "Password reset token is invalid or has expired." });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        await dbRun("UPDATE users SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE id = ?", [hashedPassword, user.id]);
+
+        console.log(`Password has been reset for user: ${user.email}`);
+        res.json({ message: "Password has been reset successfully." });
+    } catch (err) {
+        console.error("Error in /api/auth/reset-password endpoint:", err);
+        res.status(500).json({ "error": err.message });
+    }
+});
+
 
 
 // POST create employee (REFACTORED WITH TRANSACTIONS)
@@ -1124,7 +1177,7 @@ app.post('/api/users', async (req, res) => {
 // PUT update user
 app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
-    const { name, email, role } = req.body;
+    const { name, email, role, password } = req.body;
     try {
         console.log(`API Request: PUT /api/users/${id} for user: ${name}, email: ${email}, role: ${role}`);
         // Check if email is already used by another user
@@ -1134,16 +1187,23 @@ app.put('/api/users/:id', async (req, res) => {
             return res.status(400).json({ message: 'Email already exists' });
         }
 
-        const result = await dbRun(`UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?`, 
-            [name, email, role, id]);
-        
-        if (result.changes === 0) {
-            console.log(`User not found for update: ${id}`);
-            return res.status(404).json({ message: 'User not found' });
+        if (password) {
+            console.log(`Updating password for user ${id}`);
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(password, salt);
+            const result = await dbRun(`UPDATE users SET name = ?, email = ?, role = ?, password = ? WHERE id = ?`, 
+                [name, email, role, hashedPassword, id]);
+            console.log('Update result:', result);
+            res.json({ message: 'User and password updated successfully' });
+        } else {
+            console.log(`Updating user data (no password change) for user ${id}`);
+            const result = await dbRun(`UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?`, 
+                [name, email, role, id]);
+            console.log('Update result:', result);
+            res.json({ message: 'User updated successfully' });
         }
         
         console.log(`User updated successfully: ${id}`);
-        res.json({ message: 'User updated successfully' });
     } catch (err) {
         console.error(`Update user ${id} error:`, err);
         res.status(500).json({ error: "An internal server error occurred.", details: err.message });
@@ -1340,7 +1400,7 @@ const checkUpcomingPromotions = async () => {
         targetDate.setDate(targetDate.getDate() + daysBefore);
         const targetDateString = targetDate.toISOString().split('T')[0];
 
-        const employees = await dbAll("SELECT id, employeeName, nextPromotionDate FROM employees WHERE nextPromotionDate = ?", [targetDateString]);
+        const employees = await dbAll("SELECT e.id, u.name as employeeName, e.nextPromotionDate FROM employees e JOIN users u ON e.id = u.employeeId WHERE e.nextPromotionDate = ?", [targetDateString]);
 
         if (employees.length > 0) {
             console.log(`Found ${employees.length} employees with upcoming promotions.`);

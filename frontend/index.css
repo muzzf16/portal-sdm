@@ -1,10 +1,10 @@
+/* Bootstrap CSS */
+@import 'bootstrap/dist/css/bootstrap.min.css';
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Bootstrap CSS */
-/* @import 'bootstrap/dist/css/bootstrap.min.css'; */
-@import 'bootstrap-icons/font/bootstrap-icons.css';
 
 /* Custom styles can be added here */
 .sidebar {
